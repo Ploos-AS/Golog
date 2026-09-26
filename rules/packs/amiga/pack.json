@@ -1,0 +1,9 @@
+{
+  "id": "amiga",
+  "version": "0.1.0",
+  "description": "Amiga expert rules for Golog.",
+  "roles": ["amiga"],
+  "commands": ["!amiga"],
+  "capabilities": ["expert.amiga"],
+  "depends": []
+}
