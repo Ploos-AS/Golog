@@ -8,11 +8,13 @@ import (
 	"time"
 
 	gprolog "github.com/Ploos-AS/Golog/internal/prolog"
+	gstate "github.com/Ploos-AS/Golog/internal/state"
 )
 
 // Worker serializes rule-engine access through a single goroutine.
 type Worker struct {
 	engine gprolog.Engine
+	state  gstate.Store
 	in     chan Event
 	out    chan Action
 	err    chan error
@@ -29,6 +31,9 @@ func NewWorker(engine gprolog.Engine, queueSize int) *Worker {
 		err:    make(chan error, queueSize),
 	}
 }
+
+// SetStateStore enables persistent state for state-aware Prolog hooks.
+func (w *Worker) SetStateStore(store gstate.Store) { w.state = store }
 
 func (w *Worker) Events() chan<- Event { return w.in }
 func (w *Worker) Actions() <-chan Action { return w.out }
@@ -76,6 +81,21 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 	timestamp := eventTime(ev.Time)
 	tags := flattenTags(ev.Tags)
 
+	// M0.9 state-aware action hook. Internal STATE_* actions mutate the Go store
+	// and are never forwarded to IRC.
+	if w.state != nil {
+		actions, err := w.engine.QueryActions(
+			`catch(on_privmsg_state(?, ?, ?, ?, ?, ?, ?, Command, Target, Arg, Text), _, fail).`,
+			ev.Nick, ev.Account, ev.Target, ev.Text, timestamp, tags, gstate.Flatten(w.state.Snapshot()),
+		)
+		if err != nil {
+			return fmt.Errorf("prolog on_privmsg_state/11: %w", err)
+		}
+		if len(actions) > 0 {
+			return w.applyRuleActions(ctx, actions)
+		}
+	}
+
 	actions, err := w.engine.QueryActions(
 		`catch(on_privmsg_action(?, ?, ?, ?, ?, ?, Command, Target, Arg, Text), _, fail).`,
 		ev.Nick, ev.Account, ev.Target, ev.Text, timestamp, tags,
@@ -84,12 +104,7 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 		return fmt.Errorf("prolog on_privmsg_action/10: %w", err)
 	}
 	if len(actions) > 0 {
-		for _, a := range actions {
-			if err := w.emit(ctx, Action{Command: strings.ToUpper(a.Command), Target: a.Target, Arg: a.Arg, Text: a.Text}); err != nil {
-				return err
-			}
-		}
-		return nil
+		return w.applyRuleActions(ctx, actions)
 	}
 
 	reply, ok, err := w.engine.QueryReply(
@@ -112,6 +127,19 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 }
 
 func (w *Worker) handleTimer(ctx context.Context, ev Event) error {
+	if w.state != nil {
+		actions, err := w.engine.QueryActions(
+			`catch(on_timer_state(?, ?, ?, Command, Target, Arg, Text), _, fail).`,
+			ev.Name, eventTime(ev.Time), gstate.Flatten(w.state.Snapshot()),
+		)
+		if err != nil {
+			return fmt.Errorf("prolog on_timer_state/7: %w", err)
+		}
+		if len(actions) > 0 {
+			return w.applyRuleActions(ctx, actions)
+		}
+	}
+
 	actions, err := w.engine.QueryActions(
 		`catch(on_timer(?, ?, Command, Target, Arg, Text), _, fail).`,
 		ev.Name, eventTime(ev.Time),
@@ -119,9 +147,31 @@ func (w *Worker) handleTimer(ctx context.Context, ev Event) error {
 	if err != nil {
 		return fmt.Errorf("prolog on_timer/6: %w", err)
 	}
+	return w.applyRuleActions(ctx, actions)
+}
+
+func (w *Worker) applyRuleActions(ctx context.Context, actions []gprolog.RuleAction) error {
 	for _, a := range actions {
-		if err := w.emit(ctx, Action{Command: strings.ToUpper(a.Command), Target: a.Target, Arg: a.Arg, Text: a.Text}); err != nil {
-			return err
+		command := strings.ToUpper(a.Command)
+		switch command {
+		case "STATE_SET":
+			if w.state == nil {
+				continue
+			}
+			if err := w.state.Set(a.Target, a.Text); err != nil {
+				return fmt.Errorf("state set %q: %w", a.Target, err)
+			}
+		case "STATE_DELETE":
+			if w.state == nil {
+				continue
+			}
+			if err := w.state.Delete(a.Target); err != nil {
+				return fmt.Errorf("state delete %q: %w", a.Target, err)
+			}
+		default:
+			if err := w.emit(ctx, Action{Command: command, Target: a.Target, Arg: a.Arg, Text: a.Text}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
