@@ -76,15 +76,20 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 
 	// M0.7 action hook. Every matching Prolog solution becomes one IRC action.
 	actions, err := w.engine.QueryActions(
-		`catch(on_privmsg_action(?, ?, ?, ?, ?, ?, Command, Target, Text), _, fail).`,
+		`catch(on_privmsg_action(?, ?, ?, ?, ?, ?, Command, Target, Arg, Text), _, fail).`,
 		ev.Nick, ev.Account, ev.Target, ev.Text, timestamp, tags,
 	)
 	if err != nil {
-		return fmt.Errorf("prolog on_privmsg_action/9: %w", err)
+		return fmt.Errorf("prolog on_privmsg_action/10: %w", err)
 	}
 	if len(actions) > 0 {
 		for _, a := range actions {
-			if err := w.emit(ctx, Action{Command: strings.ToUpper(a.Command), Target: a.Target, Text: a.Text}); err != nil {
+			if err := w.emit(ctx, Action{
+				Command: strings.ToUpper(a.Command),
+				Target:  a.Target,
+				Arg:     a.Arg,
+				Text:    a.Text,
+			}); err != nil {
 				return err
 			}
 		}
