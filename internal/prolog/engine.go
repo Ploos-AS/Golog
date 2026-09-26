@@ -4,6 +4,7 @@ package prolog
 type RuleAction struct {
 	Command string
 	Target  string
+	Arg     string
 	Text    string
 }
 
