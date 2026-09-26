@@ -161,6 +161,24 @@ Access is based on authenticated IRC account data (`account-tag` / account state
 
 `!admin reload` uses the same validated rule loader as SIGHUP. Invalid rules are rejected before the active engine is replaced. Admin commands are intercepted before the Prolog rule pipeline, so ordinary rule output cannot impersonate the operator layer.
 
+### M0.12 observability
+
+Golog uses structured JSON logging through Go `slog`. Runtime events such as startup, IRC connect/disconnect, rule reload and observability HTTP startup are emitted as structured records.
+
+An optional dependency-free HTTP endpoint can be enabled with:
+
+```sh
+GOLOG_HTTP_ADDR=127.0.0.1:8080
+```
+
+Endpoints:
+
+- `/healthz` — process liveness.
+- `/readyz` — HTTP 200 only while the IRC runtime is connected/ready; otherwise HTTP 503.
+- `/metrics` — Prometheus text exposition format.
+
+Metrics include IRC connectivity, readiness, event/action counters, reconnects, reload successes/failures, state persistence errors, worker event-queue depth/capacity and process uptime. The HTTP listener is disabled by default, so Golog remains a standalone IRC bot with no mandatory web service.
+
 ## Running
 
 ```sh
