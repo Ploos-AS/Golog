@@ -22,6 +22,23 @@ M0 establishes the standalone Go runtime, embedded Prolog engine, event model an
 - load/query smoke test
 - initial `rules/hello.pl`
 
+### M0.2 IRC event pipeline
+
+- normalized IRC event/action model
+- serialized Prolog worker
+- minimal IRC message parser
+- minimal IRC client core with NICK/USER, PING/PONG and PRIVMSG handling
+- `PRIVMSG -> Prolog on_privmsg/4 -> PRIVMSG` path
+- unit tests for IRC parsing and the Prolog worker
+
+Current demo rule:
+
+```prolog
+on_privmsg(_Nick, _Target, "!hello", "Hello from Golog Prolog!").
+```
+
+BotAI, BotWeb and PBMP are not required anywhere in this path.
+
 ## License
 
 Software is intended to be MIT licensed unless otherwise noted.
