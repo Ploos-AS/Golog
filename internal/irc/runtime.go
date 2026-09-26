@@ -99,7 +99,8 @@ func writeRegistration(conn net.Conn, c *Client) error {
 	if c.Real == "" {
 		c.Real = "Golog IRC bot"
 	}
-	_, err := fmt.Fprintf(conn, "NICK %s\r\nUSER %s 0 * :%s\r\n", c.Nick, c.User, c.Real)
+	_, err := fmt.Fprintf(conn, "CAP LS 302\r\nNICK %s\r\nUSER %s 0 * :%s\r\n",
+		sanitizeParam(c.Nick), sanitizeParam(c.User), sanitizeText(c.Real))
 	return err
 }
 
@@ -109,7 +110,7 @@ func joinChannels(conn net.Conn, channels []string) error {
 		if channel == "" {
 			continue
 		}
-		if _, err := fmt.Fprintf(conn, "JOIN %s\r\n", channel); err != nil {
+		if _, err := fmt.Fprintf(conn, "JOIN %s\r\n", sanitizeParam(channel)); err != nil {
 			return err
 		}
 	}
