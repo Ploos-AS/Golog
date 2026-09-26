@@ -17,3 +17,16 @@ func TestParsePrivmsg(t *testing.T) {
 		t.Fatalf("trail = %q", m.Trail)
 	}
 }
+
+func TestParseIRCv3Tags(t *testing.T) {
+	m := Parse("@account=alice;time=2026-09-26T12:00:00.123Z;example=hello\\sworld :alice!u@example PRIVMSG #golog :hi")
+	if m.Tags["account"] != "alice" {
+		t.Fatalf("account tag = %q", m.Tags["account"])
+	}
+	if m.Tags["time"] != "2026-09-26T12:00:00.123Z" {
+		t.Fatalf("time tag = %q", m.Tags["time"])
+	}
+	if m.Tags["example"] != "hello world" {
+		t.Fatalf("escaped tag = %q", m.Tags["example"])
+	}
+}
