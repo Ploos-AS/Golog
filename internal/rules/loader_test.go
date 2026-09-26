@@ -41,8 +41,8 @@ func TestExpandDirectoryIsRecursiveAndStable(t *testing.T) {
 func TestLoadCombinesMultipleRuleFiles(t *testing.T) {
 	root := t.TempDir()
 	for name, body := range map[string]string{
-		"10-base.pl": `expert("irc").`,
-		"20-extra.pl": `expert("amiga").`,
+		"10-base.pl": `expert(irc).`,
+		"20-extra.pl": `expert(amiga).`,
 	} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
