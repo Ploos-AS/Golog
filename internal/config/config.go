@@ -23,6 +23,7 @@ type Config struct {
 	SASLPass         string
 	TimerName        string
 	TimerInterval    time.Duration
+	AdminAccounts    []string
 }
 
 func FromEnv() (Config, error) {
@@ -47,14 +48,8 @@ func FromEnv() (Config, error) {
 	}
 	cfg.TLS = tlsEnabled
 
-	if raw := strings.TrimSpace(os.Getenv("GOLOG_IRC_CHANNELS")); raw != "" {
-		for _, ch := range strings.Split(raw, ",") {
-			ch = strings.TrimSpace(ch)
-			if ch != "" {
-				cfg.Channels = append(cfg.Channels, ch)
-			}
-		}
-	}
+	cfg.Channels = splitCSV(os.Getenv("GOLOG_IRC_CHANNELS"))
+	cfg.AdminAccounts = splitCSV(os.Getenv("GOLOG_ADMIN_ACCOUNTS"))
 
 	if raw := strings.TrimSpace(os.Getenv("GOLOG_TIMER_INTERVAL")); raw != "" {
 		interval, err := time.ParseDuration(raw)
@@ -80,6 +75,17 @@ func FromEnv() (Config, error) {
 		return Config{}, fmt.Errorf("SASL PLAIN requires GOLOG_IRC_TLS=true")
 	}
 	return cfg, nil
+}
+
+func splitCSV(raw string) []string {
+	var out []string
+	for _, value := range strings.Split(raw, ",") {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func getenv(key, fallback string) string {
