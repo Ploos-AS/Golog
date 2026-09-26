@@ -67,6 +67,41 @@ func TestRichPrivmsgHook(t *testing.T) {
 	}
 }
 
+func TestPrivmsgActionHookReturnsMultipleActions(t *testing.T) {
+	engine := ichiban.New()
+	if err := engine.Load(`
+		on_privmsg_action(_Nick, _Account, "#golog", "!ops", _Time, _Tags, "NOTICE", "alice", "", "first").
+		on_privmsg_action(_Nick, _Account, "#golog", "!ops", _Time, _Tags, "MODE", "#golog", "+v alice", "").
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := NewWorker(engine, 4)
+	go w.Run(ctx)
+	w.Events() <- Event{Type: EventPrivmsg, Nick: "alice", Target: "#golog", Text: "!ops"}
+
+	var got []Action
+	deadline := time.After(time.Second)
+	for len(got) < 2 {
+		select {
+		case err := <-w.Errors():
+			t.Fatal(err)
+		case a := <-w.Actions():
+			got = append(got, a)
+		case <-deadline:
+			t.Fatalf("timed out waiting for actions: %#v", got)
+		}
+	}
+	if got[0].Command != "NOTICE" || got[0].Target != "alice" || got[0].Text != "first" {
+		t.Fatalf("unexpected first action: %#v", got[0])
+	}
+	if got[1].Command != "MODE" || got[1].Target != "#golog" || got[1].Arg != "+v alice" {
+		t.Fatalf("unexpected second action: %#v", got[1])
+	}
+}
+
 func TestFlattenTagsStable(t *testing.T) {
 	got := flattenTags(map[string]string{"time": "t", "account": "a"})
 	if got != "account=a;time=t" {
