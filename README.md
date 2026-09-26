@@ -140,6 +140,27 @@ Reload is transactional:
 
 If the new rule file is invalid, Golog logs the reload error and continues using the previous working rules. Tests verify both rule replacement and state preservation across an engine swap.
 
+### M0.11 operator/admin layer
+
+Privileged IRC administration is handled by the Go core, not by normal Prolog rules. Configure one or more allowed IRC account names:
+
+```sh
+GOLOG_ADMIN_ACCOUNTS=aliceacct,bobacct
+```
+
+Access is based on authenticated IRC account data (`account-tag` / account state), never on nickname alone. Admin accounts can use:
+
+```text
+!admin status
+!admin reload
+!admin join #channel
+!admin part #channel [reason]
+!admin state [key]
+!admin help
+```
+
+`!admin reload` uses the same validated rule loader as SIGHUP. Invalid rules are rejected before the active engine is replaced. Admin commands are intercepted before the Prolog rule pipeline, so ordinary rule output cannot impersonate the operator layer.
+
 ## Running
 
 ```sh
