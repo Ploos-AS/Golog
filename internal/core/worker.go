@@ -55,6 +55,8 @@ func (w *Worker) handle(ctx context.Context, ev Event) error {
 	switch ev.Type {
 	case EventPrivmsg:
 		return w.handlePrivmsg(ctx, ev)
+	case EventTimer:
+		return w.handleTimer(ctx, ev)
 	case EventJoin:
 		return w.fire(`catch(on_join(?, ?, ?, ?), _, fail).`, ev.Nick, ev.Account, ev.Target, eventTime(ev.Time))
 	case EventPart:
@@ -74,7 +76,6 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 	timestamp := eventTime(ev.Time)
 	tags := flattenTags(ev.Tags)
 
-	// M0.7 action hook. Every matching Prolog solution becomes one IRC action.
 	actions, err := w.engine.QueryActions(
 		`catch(on_privmsg_action(?, ?, ?, ?, ?, ?, Command, Target, Arg, Text), _, fail).`,
 		ev.Nick, ev.Account, ev.Target, ev.Text, timestamp, tags,
@@ -84,19 +85,13 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 	}
 	if len(actions) > 0 {
 		for _, a := range actions {
-			if err := w.emit(ctx, Action{
-				Command: strings.ToUpper(a.Command),
-				Target:  a.Target,
-				Arg:     a.Arg,
-				Text:    a.Text,
-			}); err != nil {
+			if err := w.emit(ctx, Action{Command: strings.ToUpper(a.Command), Target: a.Target, Arg: a.Arg, Text: a.Text}); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	// M0.6 rich reply hook. catch/3 keeps old rule sets valid when on_privmsg/7 is absent.
 	reply, ok, err := w.engine.QueryReply(
 		`catch(on_privmsg(?, ?, ?, ?, ?, ?, Reply), _, fail).`,
 		ev.Nick, ev.Account, ev.Target, ev.Text, timestamp, tags,
@@ -104,8 +99,6 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 	if err != nil {
 		return fmt.Errorf("prolog on_privmsg/7: %w", err)
 	}
-
-	// Backward compatibility with the M0.2 on_privmsg/4 contract.
 	if !ok {
 		reply, ok, err = w.engine.QueryReply(`catch(on_privmsg(?, ?, ?, Reply), _, fail).`, ev.Nick, ev.Target, ev.Text)
 		if err != nil {
@@ -115,8 +108,23 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 	if !ok || reply == "" {
 		return nil
 	}
-
 	return w.emit(ctx, Action{Command: "PRIVMSG", Target: ev.Target, Text: reply})
+}
+
+func (w *Worker) handleTimer(ctx context.Context, ev Event) error {
+	actions, err := w.engine.QueryActions(
+		`catch(on_timer(?, ?, Command, Target, Arg, Text), _, fail).`,
+		ev.Name, eventTime(ev.Time),
+	)
+	if err != nil {
+		return fmt.Errorf("prolog on_timer/6: %w", err)
+	}
+	for _, a := range actions {
+		if err := w.emit(ctx, Action{Command: strings.ToUpper(a.Command), Target: a.Target, Arg: a.Arg, Text: a.Text}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *Worker) emit(ctx context.Context, action Action) error {
@@ -143,8 +151,6 @@ func eventTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
-// flattenTags provides a stable representation that is easy to consume from
-// Prolog without coupling the engine interface to a Go map type.
 func flattenTags(tags map[string]string) string {
 	if len(tags) == 0 {
 		return ""
