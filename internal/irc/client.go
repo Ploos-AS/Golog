@@ -18,20 +18,13 @@ type Client struct {
 }
 
 func (c *Client) Run(ctx context.Context, conn net.Conn, events chan<- core.Event, actions <-chan core.Action) error {
-	if c.Nick == "" {
-		c.Nick = "Golog"
-	}
-	if c.User == "" {
-		c.User = "golog"
-	}
-	if c.Real == "" {
-		c.Real = "Golog IRC bot"
-	}
-
-	if _, err := fmt.Fprintf(conn, "NICK %s\r\nUSER %s 0 * :%s\r\n", c.Nick, c.User, c.Real); err != nil {
+	if err := writeRegistration(conn, c); err != nil {
 		return err
 	}
+	return c.RunRegistered(ctx, conn, events, actions)
+}
 
+func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<- core.Event, actions <-chan core.Action) error {
 	errCh := make(chan error, 1)
 	go func() {
 		s := bufio.NewScanner(conn)
