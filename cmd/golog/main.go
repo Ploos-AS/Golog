@@ -37,8 +37,13 @@ func main() {
 	go worker.Run(ctx)
 
 	runtime := &irc.Runtime{
-		Config:  cfg,
-		Client:  &irc.Client{Nick: cfg.Nick, User: cfg.User, Real: cfg.Real},
+		Config: cfg,
+		Client: &irc.Client{
+			Nick:     cfg.Nick,
+			User:     cfg.User,
+			Real:     cfg.Real,
+			Channels: cfg.Channels,
+		},
 		Events:  worker.Events(),
 		Actions: worker.Actions(),
 	}
