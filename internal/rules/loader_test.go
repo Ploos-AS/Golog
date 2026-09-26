@@ -56,13 +56,13 @@ func TestLoadCombinesMultipleRuleFiles(t *testing.T) {
 	if len(files) != 2 {
 		t.Fatalf("loaded files = %d, want 2", len(files))
 	}
-	for _, name := range []string{"irc", "amiga"} {
-		ok, err := engine.Ask(`expert(?).`, name)
+	for _, query := range []string{`expert(irc).`, `expert(amiga).`} {
+		ok, err := engine.Ask(query)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !ok {
-			t.Fatalf("expert(%q) not loaded", name)
+			t.Fatalf("%s not loaded", query)
 		}
 	}
 }
