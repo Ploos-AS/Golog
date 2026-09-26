@@ -18,6 +18,7 @@ type Config struct {
 	ReconnectInitial time.Duration
 	ReconnectMax     time.Duration
 	RulePath         string
+	StatePath        string
 	SASLUser         string
 	SASLPass         string
 	TimerName        string
@@ -31,6 +32,7 @@ func FromEnv() (Config, error) {
 		User:             getenv("GOLOG_IRC_USER", "golog"),
 		Real:             getenv("GOLOG_IRC_REAL", "Golog IRC bot"),
 		RulePath:         getenv("GOLOG_RULES", "rules/hello.pl"),
+		StatePath:        getenv("GOLOG_STATE", "data/state.json"),
 		ReconnectInitial: time.Second,
 		ReconnectMax:     30 * time.Second,
 		SASLUser:         os.Getenv("GOLOG_IRC_SASL_USER"),
@@ -67,6 +69,9 @@ func FromEnv() (Config, error) {
 
 	if cfg.Server == "" {
 		return Config{}, fmt.Errorf("GOLOG_IRC_SERVER must not be empty")
+	}
+	if cfg.StatePath == "" {
+		return Config{}, fmt.Errorf("GOLOG_STATE must not be empty")
 	}
 	if (cfg.SASLUser == "") != (cfg.SASLPass == "") {
 		return Config{}, fmt.Errorf("GOLOG_IRC_SASL_USER and GOLOG_IRC_SASL_PASS must be set together")
