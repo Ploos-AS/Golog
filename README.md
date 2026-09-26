@@ -179,6 +179,19 @@ Endpoints:
 
 Metrics include IRC connectivity, readiness, event/action counters, reconnects, reload successes/failures, state persistence errors, worker event-queue depth/capacity and process uptime. The HTTP listener is disabled by default, so Golog remains a standalone IRC bot with no mandatory web service.
 
+### M0 qualification
+
+M0 is runner-qualified on GitHub Actions. The qualification pipeline verifies:
+
+- `go mod tidy` produces no uncommitted module changes,
+- `go vet ./...`,
+- `go test ./...`, including an in-process `IRC -> Prolog -> IRC` smoke test,
+- `go test -race ./...`,
+- `go build ./cmd/golog`,
+- an Alpine-based OCI image build from the repository `Dockerfile`.
+
+The OCI image uses Alpine Linux, runs Golog as an unprivileged user, includes CA certificates for verified TLS, and keeps persistent state under `/app/data`.
+
 ## Running
 
 ```sh
