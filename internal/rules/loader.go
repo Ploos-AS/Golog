@@ -66,9 +66,10 @@ func Expand(paths []string) ([]string, error) {
 	return files, nil
 }
 
-// Load creates a fresh engine and loads the complete resolved ruleset in one
-// interpreter operation. This preserves clauses for predicates spread across
-// multiple pack files and makes validation atomic before a hot-reload swap.
+// Load creates a fresh engine and loads the generated core discovery clauses
+// plus the complete resolved ruleset in one interpreter operation. This
+// preserves clauses for predicates spread across multiple pack files and makes
+// validation atomic before a hot-reload swap.
 func Load(paths []string, factory EngineFactory) (gprolog.Engine, []string, error) {
 	if factory == nil {
 		return nil, nil, fmt.Errorf("engine factory must not be nil")
@@ -77,8 +78,13 @@ func Load(paths []string, factory EngineFactory) (gprolog.Engine, []string, erro
 	if err != nil {
 		return nil, nil, err
 	}
+	registry, err := DiscoverRegistry(paths)
+	if err != nil {
+		return nil, nil, fmt.Errorf("discover rule packs: %w", err)
+	}
 
 	var source strings.Builder
+	source.WriteString(DiscoverySource(registry))
 	for _, path := range files {
 		body, err := os.ReadFile(path)
 		if err != nil {
