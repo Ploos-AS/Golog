@@ -3,6 +3,7 @@ package irc
 import "strings"
 
 type Message struct {
+	Tags    map[string]string
 	Prefix  string
 	Command string
 	Params  []string
@@ -11,7 +12,18 @@ type Message struct {
 
 func Parse(line string) Message {
 	line = strings.TrimRight(line, "\r\n")
-	m := Message{}
+	m := Message{Tags: map[string]string{}}
+	if strings.HasPrefix(line, "@") {
+		if i := strings.IndexByte(line, ' '); i >= 0 {
+			for _, raw := range strings.Split(line[1:i], ";") {
+				key, value, _ := strings.Cut(raw, "=")
+				if key != "" {
+					m.Tags[key] = unescapeTag(value)
+				}
+			}
+			line = strings.TrimLeft(line[i+1:], " ")
+		}
+	}
 	if strings.HasPrefix(line, ":") {
 		if i := strings.IndexByte(line, ' '); i >= 0 {
 			m.Prefix = line[1:i]
@@ -31,6 +43,11 @@ func Parse(line string) Message {
 		m.Params = parts[1:]
 	}
 	return m
+}
+
+func unescapeTag(s string) string {
+	r := strings.NewReplacer(`\:`, ";", `\s`, " ", `\\`, `\`, `\r`, "\r", `\n`, "\n")
+	return r.Replace(s)
 }
 
 func NickFromPrefix(prefix string) string {
