@@ -61,7 +61,7 @@ func (e *Engine) QueryReply(query string, args ...any) (string, bool, error) {
 	return result.Reply, true, nil
 }
 
-// QueryActions evaluates a goal that returns Command, Target and Text for every solution.
+// QueryActions evaluates a goal that returns one structured action per solution.
 func (e *Engine) QueryActions(query string, args ...any) ([]gprolog.RuleAction, error) {
 	solutions, err := e.p.Query(query, args...)
 	if err != nil {
@@ -74,12 +74,18 @@ func (e *Engine) QueryActions(query string, args ...any) ([]gprolog.RuleAction, 
 		var result struct {
 			Command string
 			Target  string
+			Arg     string
 			Text    string
 		}
 		if err := solutions.Scan(&result); err != nil {
 			return nil, err
 		}
-		out = append(out, gprolog.RuleAction{Command: result.Command, Target: result.Target, Text: result.Text})
+		out = append(out, gprolog.RuleAction{
+			Command: result.Command,
+			Target:  result.Target,
+			Arg:     result.Arg,
+			Text:    result.Text,
+		})
 	}
 	if err := solutions.Err(); err != nil {
 		return nil, err
