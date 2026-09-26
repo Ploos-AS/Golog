@@ -20,6 +20,8 @@ type Config struct {
 	RulePath         string
 	SASLUser         string
 	SASLPass         string
+	TimerName        string
+	TimerInterval    time.Duration
 }
 
 func FromEnv() (Config, error) {
@@ -33,6 +35,7 @@ func FromEnv() (Config, error) {
 		ReconnectMax:     30 * time.Second,
 		SASLUser:         os.Getenv("GOLOG_IRC_SASL_USER"),
 		SASLPass:         os.Getenv("GOLOG_IRC_SASL_PASS"),
+		TimerName:        getenv("GOLOG_TIMER_NAME", "heartbeat"),
 	}
 
 	tlsValue := getenv("GOLOG_IRC_TLS", "true")
@@ -49,6 +52,17 @@ func FromEnv() (Config, error) {
 				cfg.Channels = append(cfg.Channels, ch)
 			}
 		}
+	}
+
+	if raw := strings.TrimSpace(os.Getenv("GOLOG_TIMER_INTERVAL")); raw != "" {
+		interval, err := time.ParseDuration(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("GOLOG_TIMER_INTERVAL: %w", err)
+		}
+		if interval <= 0 {
+			return Config{}, fmt.Errorf("GOLOG_TIMER_INTERVAL must be greater than zero")
+		}
+		cfg.TimerInterval = interval
 	}
 
 	if cfg.Server == "" {
