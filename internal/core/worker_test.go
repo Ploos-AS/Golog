@@ -2,10 +2,12 @@ package core
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Ploos-AS/Golog/internal/prolog/ichiban"
+	"github.com/Ploos-AS/Golog/internal/state"
 )
 
 func TestPrivmsgThroughLegacyPrologWorker(t *testing.T) {
@@ -123,6 +125,45 @@ func TestTimerHookProducesAction(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for timer action")
+	}
+}
+
+func TestPersistentStateActionsAndSnapshot(t *testing.T) {
+	engine := ichiban.New()
+	if err := engine.Load(`
+		on_privmsg_state(_Nick, _Account, _Target, "!remember", _Time, _Tags, _State,
+		                 "STATE_SET", "favorite", "", "amiga").
+		on_privmsg_state(_Nick, _Account, Target, "!state", _Time, _Tags, State,
+		                 "PRIVMSG", Target, "", State).
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := state.Open(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := NewWorker(engine, 4)
+	w.SetStateStore(store)
+	ctx := context.Background()
+
+	if err := w.handle(ctx, Event{Type: EventPrivmsg, Nick: "alice", Target: "#golog", Text: "!remember"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := store.Get("favorite"); !ok || got != "amiga" {
+		t.Fatalf("persistent state = %q, %v", got, ok)
+	}
+
+	if err := w.handle(ctx, Event{Type: EventPrivmsg, Nick: "alice", Target: "#golog", Text: "!state"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case action := <-w.Actions():
+		if action.Text != "favorite=amiga" {
+			t.Fatalf("state snapshot reply = %q", action.Text)
+		}
+	default:
+		t.Fatal("expected state-aware action")
 	}
 }
 
