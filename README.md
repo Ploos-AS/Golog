@@ -31,6 +31,27 @@ M0 establishes the standalone Go runtime, embedded Prolog engine, event model an
 - `PRIVMSG -> Prolog on_privmsg/4 -> PRIVMSG` path
 - unit tests for IRC parsing and the Prolog worker
 
+### M0.3 network runtime
+
+- environment-based runtime configuration
+- TCP and TLS connections
+- TLS 1.2 minimum with server-name verification
+- reconnect loop with exponential backoff
+- automatic NICK/USER registration
+- automatic channel JOIN
+- signal-aware shutdown
+- runtime test for registration and JOIN output
+
+Run against an IRC network:
+
+```sh
+GOLOG_IRC_SERVER=irc.libera.chat:6697 \
+GOLOG_IRC_TLS=true \
+GOLOG_IRC_NICK=GologTest \
+GOLOG_IRC_CHANNELS=#golog-test \
+go run ./cmd/golog
+```
+
 Current demo rule:
 
 ```prolog
