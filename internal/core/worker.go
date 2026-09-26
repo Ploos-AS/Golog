@@ -11,6 +11,11 @@ import (
 	gstate "github.com/Ploos-AS/Golog/internal/state"
 )
 
+type reloadRequest struct {
+	engine gprolog.Engine
+	done   chan error
+}
+
 // Worker serializes rule-engine access through a single goroutine.
 type Worker struct {
 	engine gprolog.Engine
@@ -18,6 +23,7 @@ type Worker struct {
 	in     chan Event
 	out    chan Action
 	err    chan error
+	reload chan reloadRequest
 }
 
 func NewWorker(engine gprolog.Engine, queueSize int) *Worker {
@@ -29,6 +35,7 @@ func NewWorker(engine gprolog.Engine, queueSize int) *Worker {
 		in:     make(chan Event, queueSize),
 		out:    make(chan Action, queueSize),
 		err:    make(chan error, queueSize),
+		reload: make(chan reloadRequest),
 	}
 }
 
@@ -39,11 +46,34 @@ func (w *Worker) Events() chan<- Event { return w.in }
 func (w *Worker) Actions() <-chan Action { return w.out }
 func (w *Worker) Errors() <-chan error { return w.err }
 
+// Reload swaps in an already validated Prolog engine. The swap is serialized
+// with normal event processing so no query can observe a half-reloaded engine.
+func (w *Worker) Reload(ctx context.Context, engine gprolog.Engine) error {
+	if engine == nil {
+		return fmt.Errorf("reload engine must not be nil")
+	}
+	req := reloadRequest{engine: engine, done: make(chan error, 1)}
+	select {
+	case w.reload <- req:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-req.done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (w *Worker) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case req := <-w.reload:
+			w.engine = req.engine
+			req.done <- nil
 		case ev := <-w.in:
 			if err := w.handle(ctx, ev); err != nil {
 				select {
@@ -81,8 +111,6 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 	timestamp := eventTime(ev.Time)
 	tags := flattenTags(ev.Tags)
 
-	// M0.9 state-aware action hook. Internal STATE_* actions mutate the Go store
-	// and are never forwarded to IRC.
 	if w.state != nil {
 		actions, err := w.engine.QueryActions(
 			`catch(on_privmsg_state(?, ?, ?, ?, ?, ?, ?, Command, Target, Arg, Text), _, fail).`,
