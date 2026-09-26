@@ -12,6 +12,7 @@ import (
 	"github.com/Ploos-AS/Golog/internal/core"
 	"github.com/Ploos-AS/Golog/internal/irc"
 	"github.com/Ploos-AS/Golog/internal/prolog/ichiban"
+	"github.com/Ploos-AS/Golog/internal/state"
 )
 
 func main() {
@@ -30,10 +31,16 @@ func main() {
 		log.Fatalf("load rules: %v", err)
 	}
 
+	store, err := state.Open(cfg.StatePath)
+	if err != nil {
+		log.Fatalf("open state: %v", err)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	worker := core.NewWorker(engine, 64)
+	worker.SetStateStore(store)
 	go worker.Run(ctx)
 
 	if cfg.TimerInterval > 0 {
@@ -55,7 +62,7 @@ func main() {
 		Actions: worker.Actions(),
 	}
 
-	fmt.Printf("Golog M0.8: connecting to %s (TLS=%t, SASL=%t, timer=%t)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "", cfg.TimerInterval > 0)
+	fmt.Printf("Golog M0.9: connecting to %s (TLS=%t, SASL=%t, timer=%t, state=%s)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "", cfg.TimerInterval > 0, cfg.StatePath)
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatal(err)
 	}
