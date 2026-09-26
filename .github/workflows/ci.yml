@@ -18,7 +18,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Dependencies
+        run: go mod download
 
       - name: Test
         run: go test ./...
