@@ -5,7 +5,7 @@ import "testing"
 func TestLoadAndAsk(t *testing.T) {
 	engine := New()
 
-	if err := engine.Load(`hello(golog).`); err != nil {
+	if err := engine.Load(`hello("golog").`); err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
