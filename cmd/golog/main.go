@@ -37,6 +37,8 @@ func main() {
 
 	worker := core.NewWorker(engine, 64)
 	worker.SetStateStore(store)
+	worker.SetAdminAccounts(cfg.AdminAccounts)
+	worker.SetEngineLoader(func() (gprolog.Engine, error) { return loadEngine(cfg.RulePath) })
 	go worker.Run(ctx)
 
 	hup := make(chan os.Signal, 1)
@@ -83,7 +85,7 @@ func main() {
 		Actions: worker.Actions(),
 	}
 
-	fmt.Printf("Golog M0.10: connecting to %s (TLS=%t, SASL=%t, timer=%t, state=%s)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "", cfg.TimerInterval > 0, cfg.StatePath)
+	fmt.Printf("Golog M0.11: connecting to %s (TLS=%t, SASL=%t, timer=%t, state=%s, admins=%d)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "", cfg.TimerInterval > 0, cfg.StatePath, len(cfg.AdminAccounts))
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatal(err)
 	}
