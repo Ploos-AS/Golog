@@ -32,7 +32,7 @@ func run() error {
 		return err
 	}
 
-	engine, loadedRules, err := loadEngine(cfg.RulePaths)
+	engine, loadedRules, registry, err := loadEngine(cfg.RulePaths)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func run() error {
 	worker.SetStateStore(store)
 	worker.SetAdminAccounts(cfg.AdminAccounts)
 	worker.SetEngineLoader(func() (gprolog.Engine, error) {
-		candidate, _, err := loadEngine(cfg.RulePaths)
+		candidate, _, _, err := loadEngine(cfg.RulePaths)
 		return candidate, err
 	})
 	worker.SetMetrics(metrics)
@@ -73,7 +73,7 @@ func run() error {
 			case <-ctx.Done():
 				return
 			case <-hup:
-				candidate, files, err := loadEngine(cfg.RulePaths)
+				candidate, files, candidateRegistry, err := loadEngine(cfg.RulePaths)
 				if err != nil {
 					metrics.IncReloadFailures()
 					slog.Warn("rule reload rejected; keeping previous rules", "error", err)
@@ -86,7 +86,14 @@ func run() error {
 					}
 					continue
 				}
-				slog.Info("Prolog rule packs reloaded", "files", files, "count", len(files))
+				registry = candidateRegistry
+				slog.Info("Prolog rule packs reloaded",
+					"files", files,
+					"file_count", len(files),
+					"packs", registry.IDs(),
+					"roles", registry.Roles(),
+					"capabilities", registry.Capabilities(),
+				)
 			}
 		}
 	}()
@@ -111,7 +118,7 @@ func run() error {
 		Metrics: metrics,
 	}
 
-	slog.Info("Golog M1.1 starting",
+	slog.Info("Golog M1.2 starting",
 		"server", cfg.Server,
 		"tls", cfg.TLS,
 		"sasl", cfg.SASLUser != "",
@@ -121,6 +128,11 @@ func run() error {
 		"http", cfg.HTTPAddr,
 		"rule_files", loadedRules,
 		"rule_file_count", len(loadedRules),
+		"packs", registry.IDs(),
+		"pack_count", registry.Len(),
+		"roles", registry.Roles(),
+		"commands", registry.Commands(),
+		"capabilities", registry.Capabilities(),
 	)
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
 		return err
@@ -128,6 +140,14 @@ func run() error {
 	return nil
 }
 
-func loadEngine(rulePaths []string) (gprolog.Engine, []string, error) {
-	return rules.Load(rulePaths, func() gprolog.Engine { return ichiban.New() })
+func loadEngine(rulePaths []string) (gprolog.Engine, []string, *rules.Registry, error) {
+	registry, err := rules.DiscoverRegistry(rulePaths)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("discover rule packs: %w", err)
+	}
+	engine, files, err := rules.Load(rulePaths, func() gprolog.Engine { return ichiban.New() })
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return engine, files, registry, nil
 }
