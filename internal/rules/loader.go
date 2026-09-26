@@ -66,9 +66,9 @@ func Expand(paths []string) ([]string, error) {
 	return files, nil
 }
 
-// Load creates a fresh engine and loads all resolved rule files into it.
-// Callers can therefore validate a complete rule pack set before swapping it
-// into a running worker.
+// Load creates a fresh engine and loads the complete resolved ruleset in one
+// interpreter operation. This preserves clauses for predicates spread across
+// multiple pack files and makes validation atomic before a hot-reload swap.
 func Load(paths []string, factory EngineFactory) (gprolog.Engine, []string, error) {
 	if factory == nil {
 		return nil, nil, fmt.Errorf("engine factory must not be nil")
@@ -77,18 +77,27 @@ func Load(paths []string, factory EngineFactory) (gprolog.Engine, []string, erro
 	if err != nil {
 		return nil, nil, err
 	}
+
+	var source strings.Builder
+	for _, path := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read rule file %q: %w", path, err)
+		}
+		fmt.Fprintf(&source, "\n%% --- begin %s ---\n", filepath.ToSlash(path))
+		source.Write(body)
+		if len(body) == 0 || body[len(body)-1] != '\n' {
+			source.WriteByte('\n')
+		}
+		fmt.Fprintf(&source, "%% --- end %s ---\n", filepath.ToSlash(path))
+	}
+
 	engine := factory()
 	if engine == nil {
 		return nil, nil, fmt.Errorf("engine factory returned nil")
 	}
-	for _, path := range files {
-		source, err := os.ReadFile(path)
-		if err != nil {
-			return nil, nil, fmt.Errorf("read rule file %q: %w", path, err)
-		}
-		if err := engine.Load(string(source)); err != nil {
-			return nil, nil, fmt.Errorf("load rule file %q: %w", path, err)
-		}
+	if err := engine.Load(source.String()); err != nil {
+		return nil, nil, fmt.Errorf("load combined rule packs: %w", err)
 	}
 	return engine, files, nil
 }
