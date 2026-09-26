@@ -89,17 +89,8 @@ Supported commands are deliberately allowlisted: `PRIVMSG`, `NOTICE`, `JOIN`, `P
 
 The internal scheduler emits timer events onto the same serialized event queue used by IRC, so timer rules never bypass the Prolog worker.
 
-Periodic timer rule:
-
 ```prolog
 on_timer(Name, FiredAt, Command, Target, Arg, Text).
-```
-
-Example:
-
-```prolog
-on_timer("heartbeat", FiredAt, "NOTICE", "#golog", "", Text) :-
-    format(atom(Text), "Golog timer fired at ~w", [FiredAt]).
 ```
 
 Enable a periodic timer at runtime:
@@ -111,6 +102,36 @@ go run ./cmd/golog
 ```
 
 The scheduler also supports one-shot delayed timers through its internal `After` API, alongside recurring `Every` timers and cancellation/replacement by timer name.
+
+### M0.9 persistent state
+
+Golog now has a small Go-owned persistent state store. The default file is `data/state.json`; override it with `GOLOG_STATE`.
+
+State-aware Prolog hooks receive a deterministic escaped snapshot:
+
+```prolog
+on_privmsg_state(Nick, Account, Target, Text, ServerTime, Tags, State,
+                 Command, ActionTarget, Arg, ActionText).
+
+on_timer_state(Name, FiredAt, State, Command, Target, Arg, Text).
+```
+
+Two internal commands mutate state and are never sent to IRC:
+
+- `STATE_SET` — `Target` is the key and `Text` is the value.
+- `STATE_DELETE` — `Target` is the key.
+
+Example:
+
+```prolog
+on_privmsg_state(_Nick, _Account, _Target, "!remember", _Time, _Tags, _State,
+                 "STATE_SET", "favorite", "", "amiga").
+
+on_privmsg_state(_Nick, _Account, Target, "!state", _Time, _Tags, State,
+                 "PRIVMSG", Target, "", State).
+```
+
+The JSON file is written through a temporary file and rename, and runtime state files are ignored by git.
 
 ## Running
 
