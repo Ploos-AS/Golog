@@ -74,7 +74,24 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 	timestamp := eventTime(ev.Time)
 	tags := flattenTags(ev.Tags)
 
-	// M0.6 rich hook. catch/3 keeps old rule sets valid when on_privmsg/7 is absent.
+	// M0.7 action hook. Every matching Prolog solution becomes one IRC action.
+	actions, err := w.engine.QueryActions(
+		`catch(on_privmsg_action(?, ?, ?, ?, ?, ?, Command, Target, Text), _, fail).`,
+		ev.Nick, ev.Account, ev.Target, ev.Text, timestamp, tags,
+	)
+	if err != nil {
+		return fmt.Errorf("prolog on_privmsg_action/9: %w", err)
+	}
+	if len(actions) > 0 {
+		for _, a := range actions {
+			if err := w.emit(ctx, Action{Command: strings.ToUpper(a.Command), Target: a.Target, Text: a.Text}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// M0.6 rich reply hook. catch/3 keeps old rule sets valid when on_privmsg/7 is absent.
 	reply, ok, err := w.engine.QueryReply(
 		`catch(on_privmsg(?, ?, ?, ?, ?, ?, Reply), _, fail).`,
 		ev.Nick, ev.Account, ev.Target, ev.Text, timestamp, tags,
@@ -94,7 +111,10 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 		return nil
 	}
 
-	action := Action{Command: "PRIVMSG", Target: ev.Target, Text: reply}
+	return w.emit(ctx, Action{Command: "PRIVMSG", Target: ev.Target, Text: reply})
+}
+
+func (w *Worker) emit(ctx context.Context, action Action) error {
 	select {
 	case w.out <- action:
 		return nil
