@@ -36,6 +36,11 @@ func main() {
 	worker := core.NewWorker(engine, 64)
 	go worker.Run(ctx)
 
+	if cfg.TimerInterval > 0 {
+		scheduler := core.NewScheduler(worker.Events())
+		scheduler.Every(ctx, cfg.TimerName, cfg.TimerInterval)
+	}
+
 	runtime := &irc.Runtime{
 		Config: cfg,
 		Client: &irc.Client{
@@ -50,7 +55,7 @@ func main() {
 		Actions: worker.Actions(),
 	}
 
-	fmt.Printf("Golog M0.5: connecting to %s (TLS=%t, SASL=%t)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "")
+	fmt.Printf("Golog M0.8: connecting to %s (TLS=%t, SASL=%t, timer=%t)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "", cfg.TimerInterval > 0)
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatal(err)
 	}
