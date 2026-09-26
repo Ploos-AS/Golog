@@ -28,8 +28,11 @@ type Event struct {
 }
 
 // Action is an operation produced by the rule engine.
+// Arg is used for commands that need one extra structured parameter, such as
+// MODE modes/arguments or the nick being kicked by KICK.
 type Action struct {
 	Command string
 	Target  string
+	Arg     string
 	Text    string
 }
