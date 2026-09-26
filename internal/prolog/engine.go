@@ -6,4 +6,5 @@ package prolog
 type Engine interface {
 	Load(source string) error
 	Ask(query string, args ...any) (bool, error)
+	QueryString(query, variable string, args ...any) (string, bool, error)
 }
