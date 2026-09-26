@@ -16,14 +16,18 @@ type reloadRequest struct {
 	done   chan error
 }
 
+type EngineLoader func() (gprolog.Engine, error)
+
 // Worker serializes rule-engine access through a single goroutine.
 type Worker struct {
-	engine gprolog.Engine
-	state  gstate.Store
-	in     chan Event
-	out    chan Action
-	err    chan error
-	reload chan reloadRequest
+	engine        gprolog.Engine
+	state         gstate.Store
+	in            chan Event
+	out           chan Action
+	err           chan error
+	reload        chan reloadRequest
+	adminAccounts map[string]struct{}
+	engineLoader  EngineLoader
 }
 
 func NewWorker(engine gprolog.Engine, queueSize int) *Worker {
@@ -31,16 +35,32 @@ func NewWorker(engine gprolog.Engine, queueSize int) *Worker {
 		queueSize = 1
 	}
 	return &Worker{
-		engine: engine,
-		in:     make(chan Event, queueSize),
-		out:    make(chan Action, queueSize),
-		err:    make(chan error, queueSize),
-		reload: make(chan reloadRequest),
+		engine:        engine,
+		in:            make(chan Event, queueSize),
+		out:           make(chan Action, queueSize),
+		err:           make(chan error, queueSize),
+		reload:        make(chan reloadRequest),
+		adminAccounts: map[string]struct{}{},
 	}
 }
 
 // SetStateStore enables persistent state for state-aware Prolog hooks.
 func (w *Worker) SetStateStore(store gstate.Store) { w.state = store }
+
+// SetAdminAccounts enables account-authenticated operator commands. IRC account
+// names are matched case-insensitively; nicknames alone never grant access.
+func (w *Worker) SetAdminAccounts(accounts []string) {
+	w.adminAccounts = make(map[string]struct{}, len(accounts))
+	for _, account := range accounts {
+		account = strings.ToLower(strings.TrimSpace(account))
+		if account != "" {
+			w.adminAccounts[account] = struct{}{}
+		}
+	}
+}
+
+// SetEngineLoader supplies the validated engine factory used by !admin reload.
+func (w *Worker) SetEngineLoader(loader EngineLoader) { w.engineLoader = loader }
 
 func (w *Worker) Events() chan<- Event { return w.in }
 func (w *Worker) Actions() <-chan Action { return w.out }
@@ -108,6 +128,10 @@ func (w *Worker) handle(ctx context.Context, ev Event) error {
 }
 
 func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
+	if handled, err := w.handleAdmin(ctx, ev); handled || err != nil {
+		return err
+	}
+
 	timestamp := eventTime(ev.Time)
 	tags := flattenTags(ev.Tags)
 
@@ -152,6 +176,67 @@ func (w *Worker) handlePrivmsg(ctx context.Context, ev Event) error {
 		return nil
 	}
 	return w.emit(ctx, Action{Command: "PRIVMSG", Target: ev.Target, Text: reply})
+}
+
+func (w *Worker) handleAdmin(ctx context.Context, ev Event) (bool, error) {
+	fields := strings.Fields(ev.Text)
+	if len(fields) == 0 || !strings.EqualFold(fields[0], "!admin") {
+		return false, nil
+	}
+	if _, ok := w.adminAccounts[strings.ToLower(ev.Account)]; !ok || ev.Account == "" {
+		return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "admin access denied: authenticated IRC account required"})
+	}
+	if len(fields) == 1 || strings.EqualFold(fields[1], "help") {
+		return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "admin: status | reload | join <#channel> | part <#channel> [reason] | state [key]"})
+	}
+
+	switch strings.ToLower(fields[1]) {
+	case "status":
+		stateCount := 0
+		if w.state != nil {
+			stateCount = len(w.state.Snapshot())
+		}
+		return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: fmt.Sprintf("Golog admin: account=%s state_keys=%d rules=active", ev.Account, stateCount)})
+	case "reload":
+		if w.engineLoader == nil {
+			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "reload unavailable"})
+		}
+		candidate, err := w.engineLoader()
+		if err != nil {
+			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "reload rejected: " + err.Error()})
+		}
+		w.engine = candidate
+		return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "Prolog rules reloaded"})
+	case "join":
+		if len(fields) != 3 {
+			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "usage: !admin join <#channel>"})
+		}
+		return true, w.emit(ctx, Action{Command: "JOIN", Target: fields[2]})
+	case "part":
+		if len(fields) < 3 {
+			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "usage: !admin part <#channel> [reason]"})
+		}
+		reason := ""
+		if len(fields) > 3 {
+			reason = strings.Join(fields[3:], " ")
+		}
+		return true, w.emit(ctx, Action{Command: "PART", Target: fields[2], Text: reason})
+	case "state":
+		if w.state == nil {
+			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "state unavailable"})
+		}
+		if len(fields) == 2 {
+			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: gstate.Flatten(w.state.Snapshot())})
+		}
+		key := strings.Join(fields[2:], " ")
+		value, ok := w.state.Get(key)
+		if !ok {
+			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "state key not found: " + key})
+		}
+		return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: key + "=" + value})
+	default:
+		return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "unknown admin command"})
+	}
 }
 
 func (w *Worker) handleTimer(ctx context.Context, ev Event) error {
