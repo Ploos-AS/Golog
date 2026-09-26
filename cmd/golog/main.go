@@ -86,13 +86,12 @@ func run() error {
 					}
 					continue
 				}
-				registry = candidateRegistry
 				slog.Info("Prolog rule packs reloaded",
 					"files", files,
 					"file_count", len(files),
-					"packs", registry.IDs(),
-					"roles", registry.Roles(),
-					"capabilities", registry.Capabilities(),
+					"packs", candidateRegistry.IDs(),
+					"roles", candidateRegistry.Roles(),
+					"capabilities", candidateRegistry.Capabilities(),
 				)
 			}
 		}
