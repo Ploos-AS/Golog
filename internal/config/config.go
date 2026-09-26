@@ -18,6 +18,8 @@ type Config struct {
 	ReconnectInitial time.Duration
 	ReconnectMax     time.Duration
 	RulePath         string
+	SASLUser         string
+	SASLPass         string
 }
 
 func FromEnv() (Config, error) {
@@ -29,6 +31,8 @@ func FromEnv() (Config, error) {
 		RulePath:         getenv("GOLOG_RULES", "rules/hello.pl"),
 		ReconnectInitial: time.Second,
 		ReconnectMax:     30 * time.Second,
+		SASLUser:         os.Getenv("GOLOG_IRC_SASL_USER"),
+		SASLPass:         os.Getenv("GOLOG_IRC_SASL_PASS"),
 	}
 
 	tlsValue := getenv("GOLOG_IRC_TLS", "true")
@@ -49,6 +53,12 @@ func FromEnv() (Config, error) {
 
 	if cfg.Server == "" {
 		return Config{}, fmt.Errorf("GOLOG_IRC_SERVER must not be empty")
+	}
+	if (cfg.SASLUser == "") != (cfg.SASLPass == "") {
+		return Config{}, fmt.Errorf("GOLOG_IRC_SASL_USER and GOLOG_IRC_SASL_PASS must be set together")
+	}
+	if cfg.SASLUser != "" && !cfg.TLS {
+		return Config{}, fmt.Errorf("SASL PLAIN requires GOLOG_IRC_TLS=true")
 	}
 	return cfg, nil
 }
