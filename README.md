@@ -168,6 +168,7 @@ Suggested pack layout:
 
 ```text
 rules/packs/my-pack/
+  pack.json
   10-facts.pl
   20-commands.pl
   30-actions.pl
@@ -176,6 +177,26 @@ rules/packs/my-pack/
 Hot reload uses the same complete pack list, so a syntax/load error in any enabled pack rejects the candidate interpreter and leaves the active rules untouched.
 
 The repository includes starter packs for `irc-help` and `amiga`. Packs share the same event/action APIs, but must not require BotAI, BotWeb or PBMP; those remain optional integrations.
+
+### M1.2 pack metadata and capability registry
+
+Rule packs can include a machine-readable `pack.json` manifest:
+
+```json
+{
+  "id": "amiga",
+  "version": "0.1.0",
+  "description": "Amiga expert rules for Golog.",
+  "roles": ["amiga"],
+  "commands": ["!amiga"],
+  "capabilities": ["expert.amiga"],
+  "depends": []
+}
+```
+
+The runtime discovers manifests from enabled rule paths and builds a deterministic registry of loaded packs, expert roles, commands and capabilities. Manifest validation is part of startup and hot reload: duplicate IDs, malformed IDs/versions, self-dependencies and missing dependency packs reject the candidate configuration before the active interpreter is swapped.
+
+Legacy/plain `.pl` files remain valid without a manifest. This keeps Golog backward-compatible while allowing optional integrations such as BotWeb and BotAI to discover loaded expert functionality later without hardcoded knowledge of individual packs.
 
 ## Running
 
