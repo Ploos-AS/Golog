@@ -13,6 +13,15 @@ on_privmsg(_Nick, _Target, "!hello", "Hello from Golog Prolog!").
 on_privmsg(Nick, Account, _Target, "!context", ServerTime, Tags, Reply) :-
     format(atom(Reply), "nick=~w account=~w time=~w tags=~w", [Nick, Account, ServerTime, Tags]).
 
+% M0.7 multi-action contract:
+% on_privmsg_action(Nick, Account, Target, Text, ServerTime, Tags,
+%                   Command, ActionTarget, Arg, ActionText).
+% Every matching solution becomes one safe allowlisted IRC action.
+on_privmsg_action(Nick, _Account, Target, "!multi", _ServerTime, _Tags,
+                  "NOTICE", Nick, "", "private notice from Prolog").
+on_privmsg_action(_Nick, _Account, Target, "!multi", _ServerTime, _Tags,
+                  "PRIVMSG", Target, "", "channel reply from Prolog").
+
 % Optional lifecycle hooks (examples can be added by deployments):
 % on_join(Nick, Account, Channel, ServerTime).
 % on_part(Nick, Channel, Reason, ServerTime).
