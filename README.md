@@ -168,7 +168,6 @@ Suggested pack layout:
 
 ```text
 rules/packs/my-pack/
-  pack.json
   10-facts.pl
   20-commands.pl
   30-actions.pl
@@ -178,25 +177,25 @@ Hot reload uses the same complete pack list, so a syntax/load error in any enabl
 
 The repository includes starter packs for `irc-help` and `amiga`. Packs share the same event/action APIs, but must not require BotAI, BotWeb or PBMP; those remain optional integrations.
 
-### M1.2 pack metadata and capability registry
+### M1.2 pack metadata registry
 
-Rule packs can include a machine-readable `pack.json` manifest:
+Rule-pack directories may contain a `pack.json` manifest with `id`, `version`, `description`, `roles`, `commands`, `capabilities` and `depends`. The registry is deterministic and validated during startup/reload; invalid IDs/versions, duplicate pack IDs, self-dependencies and missing dependencies reject the candidate ruleset.
 
-```json
-{
-  "id": "amiga",
-  "version": "0.1.0",
-  "description": "Amiga expert rules for Golog.",
-  "roles": ["amiga"],
-  "commands": ["!amiga"],
-  "capabilities": ["expert.amiga"],
-  "depends": []
-}
+### M1.3 dynamic discovery commands
+
+Discovery is generated from the validated manifest registry and compiled into the same atomic Prolog ruleset as the enabled packs. This means startup and hot reload always expose metadata for the exact ruleset that is active.
+
+Available commands:
+
+```text
+!help
+!packs
+!packs <pack-id>
+!experts
+!capabilities
 ```
 
-The runtime discovers manifests from enabled rule paths and builds a deterministic registry of loaded packs, expert roles, commands and capabilities. Manifest validation is part of startup and hot reload: duplicate IDs, malformed IDs/versions, self-dependencies and missing dependency packs reject the candidate configuration before the active interpreter is swapped.
-
-Legacy/plain `.pl` files remain valid without a manifest. This keeps Golog backward-compatible while allowing optional integrations such as BotWeb and BotAI to discover loaded expert functionality later without hardcoded knowledge of individual packs.
+`!help` merges the built-in discovery commands with commands declared by active packs. `!packs <pack-id>` shows the pack version, description, roles, commands and capabilities. Plain legacy `.pl` files without `pack.json` remain supported.
 
 ## Running
 
