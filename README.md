@@ -53,6 +53,17 @@ M0 establishes the standalone Go runtime, embedded Prolog engine, event model an
 - larger scanner buffer for safe handling of extended IRCv3 input
 - tests for CAP registration, nick fallback, channel detection and line-injection/length handling
 
+### M0.5 IRCv3 capabilities
+
+- parses IRCv3 message tags, including tag escaping
+- requests only capabilities actually advertised by the server
+- supports `message-tags`, `server-time`, `account-tag`, `account-notify` and `extended-join` negotiation
+- exposes `account`, parsed server time and all tags on normalized `core.Event` values
+- optional SASL PLAIN authentication when both SASL environment variables are set
+- SASL PLAIN is refused unless TLS is enabled
+- SASL success/failure participates in CAP state and reconnect handling
+- capability and tag parsing tests
+
 Run against an IRC network:
 
 ```sh
@@ -60,6 +71,14 @@ GOLOG_IRC_SERVER=irc.libera.chat:6697 \
 GOLOG_IRC_TLS=true \
 GOLOG_IRC_NICK=GologTest \
 GOLOG_IRC_CHANNELS=#golog-test \
+go run ./cmd/golog
+```
+
+Optional SASL over TLS:
+
+```sh
+GOLOG_IRC_SASL_USER=GologTest \
+GOLOG_IRC_SASL_PASS='secret' \
 go run ./cmd/golog
 ```
 
