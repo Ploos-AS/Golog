@@ -38,9 +38,20 @@ M0 establishes the standalone Go runtime, embedded Prolog engine, event model an
 - TLS 1.2 minimum with server-name verification
 - reconnect loop with exponential backoff
 - automatic NICK/USER registration
-- automatic channel JOIN
+- automatic channel JOIN after server `001`
 - signal-aware shutdown
 - runtime test for registration and JOIN output
+
+### M0.4 IRC protocol hardening
+
+- IRCv3 `CAP LS 302` negotiation with clean `CAP END`
+- nick collision handling (`433`) using a fallback nick
+- correct reply target for private messages
+- reconnect naturally re-registers and rejoins configured channels
+- CR/LF sanitization for registration, PONG, JOIN and PRIVMSG output
+- outgoing PRIVMSG lines limited to the IRC 510-byte pre-CRLF limit
+- larger scanner buffer for safe handling of extended IRCv3 input
+- tests for CAP registration, nick fallback, channel detection and line-injection/length handling
 
 Run against an IRC network:
 
