@@ -12,17 +12,20 @@ const (
 	EventQuit    EventType = "quit"
 	EventNick    EventType = "nick"
 	EventAccount EventType = "account"
+	EventTimer   EventType = "timer"
 )
 
-// Event is the normalized input passed from IRC into the Prolog worker.
+// Event is the normalized input passed from IRC or the scheduler into the Prolog worker.
 // Fields are reused by event type: Target is normally a channel or new nick,
-// Text carries message/reason data, and Account carries IRCv3 account state.
+// Text carries message/reason data, Account carries IRCv3 account state, and
+// Name identifies a scheduled timer event.
 type Event struct {
 	Type    EventType
 	Nick    string
 	Target  string
 	Text    string
 	Account string
+	Name    string
 	Time    time.Time
 	Tags    map[string]string
 }
