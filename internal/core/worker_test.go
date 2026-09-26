@@ -167,6 +167,58 @@ func TestPersistentStateActionsAndSnapshot(t *testing.T) {
 	}
 }
 
+func TestReloadSwapsRulesAndPreservesState(t *testing.T) {
+	oldEngine := ichiban.New()
+	if err := oldEngine.Load(`on_privmsg(_Nick, _Target, "!version", "old").`); err != nil {
+		t.Fatal(err)
+	}
+	newEngine := ichiban.New()
+	if err := newEngine.Load(`on_privmsg(_Nick, _Target, "!version", "new").`); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := state.Open(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("favorite", "amiga"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := NewWorker(oldEngine, 4)
+	w.SetStateStore(store)
+	go w.Run(ctx)
+
+	w.Events() <- Event{Type: EventPrivmsg, Nick: "alice", Target: "#golog", Text: "!version"}
+	select {
+	case a := <-w.Actions():
+		if a.Text != "old" {
+			t.Fatalf("before reload = %q", a.Text)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out before reload")
+	}
+
+	if err := w.Reload(ctx, newEngine); err != nil {
+		t.Fatal(err)
+	}
+	w.Events() <- Event{Type: EventPrivmsg, Nick: "alice", Target: "#golog", Text: "!version"}
+	select {
+	case a := <-w.Actions():
+		if a.Text != "new" {
+			t.Fatalf("after reload = %q", a.Text)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out after reload")
+	}
+
+	if got, ok := store.Get("favorite"); !ok || got != "amiga" {
+		t.Fatalf("state lost across reload: %q, %v", got, ok)
+	}
+}
+
 func TestFlattenTagsStable(t *testing.T) {
 	got := flattenTags(map[string]string{"time": "t", "account": "a"})
 	if got != "account=a;time=t" {
