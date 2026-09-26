@@ -105,7 +105,7 @@ The scheduler also supports one-shot delayed timers through its internal `After`
 
 ### M0.9 persistent state
 
-Golog now has a small Go-owned persistent state store. The default file is `data/state.json`; override it with `GOLOG_STATE`.
+Golog has a small Go-owned persistent state store. The default file is `data/state.json`; override it with `GOLOG_STATE`.
 
 State-aware Prolog hooks receive a deterministic escaped snapshot:
 
@@ -121,17 +121,24 @@ Two internal commands mutate state and are never sent to IRC:
 - `STATE_SET` — `Target` is the key and `Text` is the value.
 - `STATE_DELETE` — `Target` is the key.
 
-Example:
+The JSON file is written through a temporary file and rename, and runtime state files are ignored by git.
 
-```prolog
-on_privmsg_state(_Nick, _Account, _Target, "!remember", _Time, _Tags, _State,
-                 "STATE_SET", "favorite", "", "amiga").
+### M0.10 safe Prolog hot reload
 
-on_privmsg_state(_Nick, _Account, Target, "!state", _Time, _Tags, State,
-                 "PRIVMSG", Target, "", State).
+Send `SIGHUP` to the running Golog process to reload the configured `.pl` rule file without disconnecting from IRC:
+
+```sh
+kill -HUP <golog-pid>
 ```
 
-The JSON file is written through a temporary file and rename, and runtime state files are ignored by git.
+Reload is transactional:
+
+1. the rule file is read into a fresh `ichiban/prolog` interpreter,
+2. the candidate interpreter must load successfully,
+3. the worker swaps engines only between serialized events,
+4. the existing IRC connection, scheduler and persistent state remain untouched.
+
+If the new rule file is invalid, Golog logs the reload error and continues using the previous working rules. Tests verify both rule replacement and state preservation across an engine swap.
 
 ## Running
 
