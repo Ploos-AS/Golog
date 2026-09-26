@@ -12,9 +12,10 @@ import (
 )
 
 type Client struct {
-	Nick string
-	User string
-	Real string
+	Nick     string
+	User     string
+	Real     string
+	Channels []string
 }
 
 func (c *Client) Run(ctx context.Context, conn net.Conn, events chan<- core.Event, actions <-chan core.Action) error {
@@ -31,6 +32,11 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 		for s.Scan() {
 			m := Parse(s.Text())
 			switch m.Command {
+			case "001":
+				if err := joinChannels(conn, c.Channels); err != nil {
+					errCh <- err
+					return
+				}
 			case "PING":
 				payload := m.Trail
 				if payload == "" && len(m.Params) > 0 {
