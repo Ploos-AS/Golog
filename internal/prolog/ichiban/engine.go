@@ -1,6 +1,9 @@
 package ichiban
 
-import "github.com/ichiban/prolog"
+import (
+	gprolog "github.com/Ploos-AS/Golog/internal/prolog"
+	"github.com/ichiban/prolog"
+)
 
 // Engine embeds the default Ichiban Prolog interpreter.
 type Engine struct {
@@ -56,4 +59,30 @@ func (e *Engine) QueryReply(query string, args ...any) (string, bool, error) {
 		return "", false, err
 	}
 	return result.Reply, true, nil
+}
+
+// QueryActions evaluates a goal that returns Command, Target and Text for every solution.
+func (e *Engine) QueryActions(query string, args ...any) ([]gprolog.RuleAction, error) {
+	solutions, err := e.p.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer solutions.Close()
+
+	var out []gprolog.RuleAction
+	for solutions.Next() {
+		var result struct {
+			Command string
+			Target  string
+			Text    string
+		}
+		if err := solutions.Scan(&result); err != nil {
+			return nil, err
+		}
+		out = append(out, gprolog.RuleAction{Command: result.Command, Target: result.Target, Text: result.Text})
+	}
+	if err := solutions.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
