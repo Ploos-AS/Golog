@@ -102,6 +102,30 @@ func TestPrivmsgActionHookReturnsMultipleActions(t *testing.T) {
 	}
 }
 
+func TestTimerHookProducesAction(t *testing.T) {
+	engine := ichiban.New()
+	if err := engine.Load(`on_timer("heartbeat", _When, "NOTICE", "#golog", "", "tick").`); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := NewWorker(engine, 4)
+	go w.Run(ctx)
+	w.Events() <- Event{Type: EventTimer, Name: "heartbeat", Time: time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)}
+
+	select {
+	case err := <-w.Errors():
+		t.Fatal(err)
+	case action := <-w.Actions():
+		if action.Command != "NOTICE" || action.Target != "#golog" || action.Text != "tick" {
+			t.Fatalf("unexpected timer action: %#v", action)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for timer action")
+	}
+}
+
 func TestFlattenTagsStable(t *testing.T) {
 	got := flattenTags(map[string]string{"time": "t", "account": "a"})
 	if got != "account=a;time=t" {
