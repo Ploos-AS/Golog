@@ -24,6 +24,7 @@ type Config struct {
 	TimerName        string
 	TimerInterval    time.Duration
 	AdminAccounts    []string
+	HTTPAddr         string
 }
 
 func FromEnv() (Config, error) {
@@ -39,6 +40,7 @@ func FromEnv() (Config, error) {
 		SASLUser:         os.Getenv("GOLOG_IRC_SASL_USER"),
 		SASLPass:         os.Getenv("GOLOG_IRC_SASL_PASS"),
 		TimerName:        getenv("GOLOG_TIMER_NAME", "heartbeat"),
+		HTTPAddr:         strings.TrimSpace(os.Getenv("GOLOG_HTTP_ADDR")),
 	}
 
 	tlsValue := getenv("GOLOG_IRC_TLS", "true")
