@@ -24,7 +24,7 @@ type Runtime struct {
 
 func (r *Runtime) Run(ctx context.Context) error {
 	if r.Client == nil {
-		r.Client = &Client{Nick: r.Config.Nick, User: r.Config.User, Real: r.Config.Real}
+		r.Client = &Client{Nick: r.Config.Nick, User: r.Config.User, Real: r.Config.Real, Channels: r.Config.Channels}
 	}
 	if r.Dial == nil {
 		r.Dial = dial
@@ -72,9 +72,6 @@ func (r *Runtime) Run(ctx context.Context) error {
 
 func (r *Runtime) runConnection(ctx context.Context, conn net.Conn) error {
 	if err := writeRegistration(conn, r.Client); err != nil {
-		return err
-	}
-	if err := joinChannels(conn, r.Config.Channels); err != nil {
 		return err
 	}
 	return r.Client.RunRegistered(ctx, conn, r.Events, r.Actions)
