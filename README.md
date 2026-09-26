@@ -49,32 +49,22 @@ M0 establishes the standalone Go runtime, embedded Prolog engine, event model an
 - correct reply target for private messages
 - reconnect naturally re-registers and rejoins configured channels
 - CR/LF sanitization for registration, PONG, JOIN and PRIVMSG output
-- outgoing PRIVMSG lines limited to the IRC 510-byte pre-CRLF limit
+- outgoing messages limited to the IRC 510-byte pre-CRLF limit
 - larger scanner buffer for safe handling of extended IRCv3 input
-- tests for CAP registration, nick fallback, channel detection and line-injection/length handling
 
 ### M0.5 IRCv3 capabilities
 
 - parses IRCv3 message tags, including tag escaping
 - requests only capabilities actually advertised by the server
-- supports `message-tags`, `server-time`, `account-tag`, `account-notify` and `extended-join` negotiation
-- exposes `account`, parsed server time and all tags on normalized `core.Event` values
-- optional SASL PLAIN authentication when both SASL environment variables are set
-- SASL PLAIN is refused unless TLS is enabled
-- SASL success/failure participates in CAP state and reconnect handling
-- capability and tag parsing tests
+- supports `message-tags`, `server-time`, `account-tag`, `account-notify` and `extended-join`
+- optional SASL PLAIN over TLS
+- exposes account, server time and tags on normalized events
 
 ### M0.6 Prolog IRC event API
 
-- rich IRCv3-aware `on_privmsg/7` hook:
-  `on_privmsg(Nick, Account, Target, Text, ServerTime, Tags, Reply)`
-- backward-compatible fallback to the original `on_privmsg/4`
-- deterministic tag representation as semicolon-separated `key=value` pairs
-- lifecycle hooks for JOIN, PART, QUIT, NICK and account changes
-- extended-join account data and account-notify are normalized into the event model
-- lifecycle events and message events share the same serialized Prolog worker
-
-Available lifecycle hooks:
+- rich IRCv3-aware `on_privmsg/7`
+- backward-compatible fallback to `on_privmsg/4`
+- lifecycle hooks for JOIN, PART, QUIT, NICK and ACCOUNT
 
 ```prolog
 on_join(Nick, Account, Channel, ServerTime).
@@ -84,7 +74,39 @@ on_nick(OldNick, NewNick, ServerTime).
 on_account(Nick, Account, ServerTime).
 ```
 
-Run against an IRC network:
+### M0.7 Prolog action API
+
+A PRIVMSG can now produce zero, one or many IRC actions using:
+
+```prolog
+on_privmsg_action(Nick, Account, Target, Text, ServerTime, Tags,
+                  Command, ActionTarget, Arg, ActionText).
+```
+
+Each matching Prolog solution becomes one action. Supported commands are deliberately allowlisted:
+
+- `PRIVMSG`
+- `NOTICE`
+- `JOIN`
+- `PART`
+- `TOPIC`
+- `MODE`
+- `KICK`
+
+`Arg` is used for structured command data such as MODE arguments or the nick for KICK. Unsupported commands are ignored; Prolog cannot emit arbitrary raw IRC lines.
+
+Example producing two actions from one event:
+
+```prolog
+on_privmsg_action(Nick, _Account, Target, "!multi", _Time, _Tags,
+                  "NOTICE", Nick, "", "private notice from Prolog").
+on_privmsg_action(_Nick, _Account, Target, "!multi", _Time, _Tags,
+                  "PRIVMSG", Target, "", "channel reply from Prolog").
+```
+
+The older reply hooks remain valid and are used when no action rule matches.
+
+## Running
 
 ```sh
 GOLOG_IRC_SERVER=irc.libera.chat:6697 \
@@ -102,17 +124,8 @@ GOLOG_IRC_SASL_PASS='secret' \
 go run ./cmd/golog
 ```
 
-Current demo rules include both the legacy hook and the rich M0.6 hook:
-
-```prolog
-on_privmsg(_Nick, _Target, "!hello", "Hello from Golog Prolog!").
-
-on_privmsg(Nick, Account, _Target, "!context", ServerTime, Tags, Reply) :-
-    format(atom(Reply), "nick=~w account=~w time=~w tags=~w", [Nick, Account, ServerTime, Tags]).
-```
-
 BotAI, BotWeb and PBMP are not required anywhere in this path.
 
 ## License
 
-Software is intended to be MIT licensed unless otherwise noted.
+Software is MIT licensed unless otherwise noted.
