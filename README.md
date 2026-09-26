@@ -131,14 +131,7 @@ Send `SIGHUP` to the running Golog process to reload the configured `.pl` rule f
 kill -HUP <golog-pid>
 ```
 
-Reload is transactional:
-
-1. the rule file is read into a fresh `ichiban/prolog` interpreter,
-2. the candidate interpreter must load successfully,
-3. the worker swaps engines only between serialized events,
-4. the existing IRC connection, scheduler and persistent state remain untouched.
-
-If the new rule file is invalid, Golog logs the reload error and continues using the previous working rules. Tests verify both rule replacement and state preservation across an engine swap.
+Reload is transactional: a fresh interpreter loads the complete configured ruleset, and the worker swaps it only after successful validation. The existing IRC connection, scheduler and persistent state remain untouched.
 
 ### M0.11 operator/admin layer
 
@@ -148,49 +141,41 @@ Privileged IRC administration is handled by the Go core, not by normal Prolog ru
 GOLOG_ADMIN_ACCOUNTS=aliceacct,bobacct
 ```
 
-Access is based on authenticated IRC account data (`account-tag` / account state), never on nickname alone. Admin accounts can use:
-
-```text
-!admin status
-!admin reload
-!admin join #channel
-!admin part #channel [reason]
-!admin state [key]
-!admin help
-```
-
-`!admin reload` uses the same validated rule loader as SIGHUP. Invalid rules are rejected before the active engine is replaced. Admin commands are intercepted before the Prolog rule pipeline, so ordinary rule output cannot impersonate the operator layer.
+Access is based on authenticated IRC account data, never nickname alone. Admin commands include status, reload, join, part, state inspection and help.
 
 ### M0.12 observability
 
-Golog uses structured JSON logging through Go `slog`. Runtime events such as startup, IRC connect/disconnect, rule reload and observability HTTP startup are emitted as structured records.
-
-An optional dependency-free HTTP endpoint can be enabled with:
-
-```sh
-GOLOG_HTTP_ADDR=127.0.0.1:8080
-```
-
-Endpoints:
-
-- `/healthz` — process liveness.
-- `/readyz` — HTTP 200 only while the IRC runtime is connected/ready; otherwise HTTP 503.
-- `/metrics` — Prometheus text exposition format.
-
-Metrics include IRC connectivity, readiness, event/action counters, reconnects, reload successes/failures, state persistence errors, worker event-queue depth/capacity and process uptime. The HTTP listener is disabled by default, so Golog remains a standalone IRC bot with no mandatory web service.
+Golog uses structured JSON logging through Go `slog`. Optional dependency-free HTTP observability is enabled with `GOLOG_HTTP_ADDR` and exposes `/healthz`, `/readyz` and `/metrics`.
 
 ### M0 qualification
 
-M0 is runner-qualified on GitHub Actions. The qualification pipeline verifies:
+M0 is runner-qualified on GitHub Actions with module verification, `go vet`, unit/integration tests including an in-process `IRC -> Prolog -> IRC` smoke test, `go test -race`, normal build and Alpine OCI build.
 
-- `go mod tidy` produces no uncommitted module changes,
-- `go vet ./...`,
-- `go test ./...`, including an in-process `IRC -> Prolog -> IRC` smoke test,
-- `go test -race ./...`,
-- `go build ./cmd/golog`,
-- an Alpine-based OCI image build from the repository `Dockerfile`.
+## M1
 
-The OCI image uses Alpine Linux, runs Golog as an unprivileged user, includes CA certificates for verified TLS, and keeps persistent state under `/app/data`.
+M1 turns the Prolog layer into a modular bot/expert ecosystem while keeping Golog fully standalone.
+
+### M1.1 rule packs
+
+`GOLOG_RULES` accepts a comma-separated list of `.pl` files and/or directories. Directories are walked recursively; only `.pl` files are loaded, de-duplicated and sorted deterministically before a fresh interpreter is validated.
+
+```sh
+GOLOG_RULES=rules/hello.pl,rules/packs/irc-help,rules/packs/amiga \
+go run ./cmd/golog
+```
+
+Suggested pack layout:
+
+```text
+rules/packs/my-pack/
+  10-facts.pl
+  20-commands.pl
+  30-actions.pl
+```
+
+Hot reload uses the same complete pack list, so a syntax/load error in any enabled pack rejects the candidate interpreter and leaves the active rules untouched.
+
+The repository includes starter packs for `irc-help` and `amiga`. Packs share the same event/action APIs, but must not require BotAI, BotWeb or PBMP; those remain optional integrations.
 
 ## Running
 
