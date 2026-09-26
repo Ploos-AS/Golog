@@ -38,7 +38,7 @@ func TestPrivmsgThroughLegacyPrologWorker(t *testing.T) {
 
 func TestRichPrivmsgHook(t *testing.T) {
 	engine := ichiban.New()
-	if err := engine.Load(`on_privmsg("alice", "aliceacct", "#golog", "!who", "2026-09-26T12:00:00Z", Tags, Reply) :- atom_length(Tags, N), N > 0, Reply = "rich-ok".`); err != nil {
+	if err := engine.Load(`on_privmsg("alice", "aliceacct", "#golog", "!who", "2026-09-26T12:00:00Z", Tags, Reply) :- string_length(Tags, N), N > 0, Reply = "rich-ok".`); err != nil {
 		t.Fatal(err)
 	}
 
