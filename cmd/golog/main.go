@@ -43,12 +43,14 @@ func main() {
 			User:     cfg.User,
 			Real:     cfg.Real,
 			Channels: cfg.Channels,
+			SASLUser: cfg.SASLUser,
+			SASLPass: cfg.SASLPass,
 		},
 		Events:  worker.Events(),
 		Actions: worker.Actions(),
 	}
 
-	fmt.Printf("Golog M0.3: connecting to %s (TLS=%t)\n", cfg.Server, cfg.TLS)
+	fmt.Printf("Golog M0.5: connecting to %s (TLS=%t, SASL=%t)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "")
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatal(err)
 	}
