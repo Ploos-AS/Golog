@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	gprolog "github.com/Ploos-AS/Golog/internal/prolog"
 	"github.com/Ploos-AS/Golog/internal/prolog/ichiban"
 )
 
@@ -48,26 +49,40 @@ func TestAdminJoinForAllowedAccount(t *testing.T) {
 
 func TestAdminReloadUsesValidatedLoader(t *testing.T) {
 	oldEngine := ichiban.New()
+	if err := oldEngine.Load(`on_privmsg(_Nick, _Target, "!v", "old").`); err != nil {
+		t.Fatal(err)
+	}
 	newEngine := ichiban.New()
 	if err := newEngine.Load(`on_privmsg(_Nick, _Target, "!v", "new").`); err != nil {
 		t.Fatal(err)
 	}
+
 	w := NewWorker(oldEngine, 4)
 	w.SetAdminAccounts([]string{"aliceacct"})
-	w.SetEngineLoader(func() (interfaceEngine, error) { return newEngine, nil })
-	_ = w
-}
+	w.SetEngineLoader(func() (gprolog.Engine, error) { return newEngine, nil })
+	ctx := context.Background()
 
-// interfaceEngine keeps this file focused on ACL behavior; reload behavior is
-// already covered by worker reload tests.
-type interfaceEngine = interface {
-	Load(string) error
-	Ask(string, ...any) (bool, error)
-	QueryReply(string, ...any) (string, bool, error)
-	QueryActions(string, ...any) ([]struct {
-		Command string
-		Target  string
-		Arg     string
-		Text    string
-	}, error)
+	if err := w.handle(ctx, Event{Type: EventPrivmsg, Nick: "alice", Account: "aliceacct", Text: "!admin reload"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case action := <-w.Actions():
+		if !strings.Contains(action.Text, "reloaded") {
+			t.Fatalf("unexpected reload notice: %#v", action)
+		}
+	default:
+		t.Fatal("expected reload notice")
+	}
+
+	if err := w.handle(ctx, Event{Type: EventPrivmsg, Nick: "alice", Target: "#golog", Text: "!v"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case action := <-w.Actions():
+		if action.Text != "new" {
+			t.Fatalf("new engine not active: %#v", action)
+		}
+	default:
+		t.Fatal("expected reply from reloaded engine")
+	}
 }
