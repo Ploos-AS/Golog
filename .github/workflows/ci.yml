@@ -34,3 +34,6 @@ jobs:
 
       - name: Build
         run: go build ./cmd/golog
+
+      - name: Alpine OCI build
+        run: docker build --pull -t golog:ci .
