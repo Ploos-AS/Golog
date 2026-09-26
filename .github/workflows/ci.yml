@@ -21,7 +21,11 @@ jobs:
           cache: false
 
       - name: Dependencies
-        run: go mod download
+        run: |
+          go mod tidy
+          echo '--- GO.SUM BEGIN ---'
+          cat go.sum
+          echo '--- GO.SUM END ---'
 
       - name: Test
         run: go test ./...
