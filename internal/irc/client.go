@@ -29,6 +29,8 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 	errCh := make(chan error, 1)
 	go func() {
 		s := bufio.NewScanner(conn)
+		buf := make([]byte, 0, 4096)
+		s.Buffer(buf, 64*1024)
 		for s.Scan() {
 			m := Parse(s.Text())
 			switch m.Command {
@@ -37,13 +39,25 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 					errCh <- err
 					return
 				}
+			case "433":
+				c.Nick = fallbackNick(c.Nick)
+				if _, err := fmt.Fprintf(conn, "NICK %s\r\n", sanitizeParam(c.Nick)); err != nil {
+					errCh <- err
+					return
+				}
+			case "CAP":
+				if len(m.Params) >= 2 && strings.EqualFold(m.Params[1], "LS") {
+					if _, err := fmt.Fprint(conn, "CAP END\r\n"); err != nil {
+						errCh <- err
+						return
+					}
+				}
 			case "PING":
 				payload := m.Trail
 				if payload == "" && len(m.Params) > 0 {
 					payload = m.Params[0]
 				}
-				_, err := fmt.Fprintf(conn, "PONG :%s\r\n", payload)
-				if err != nil {
+				if _, err := fmt.Fprintf(conn, "PONG :%s\r\n", sanitizeText(payload)); err != nil {
 					errCh <- err
 					return
 				}
@@ -51,7 +65,12 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 				if len(m.Params) < 1 {
 					continue
 				}
-				ev := core.Event{Type: core.EventPrivmsg, Nick: NickFromPrefix(m.Prefix), Target: m.Params[0], Text: m.Trail}
+				nick := NickFromPrefix(m.Prefix)
+				target := m.Params[0]
+				if strings.EqualFold(target, c.Nick) || !isChannelTarget(target) {
+					target = nick
+				}
+				ev := core.Event{Type: core.EventPrivmsg, Nick: nick, Target: target, Text: m.Trail}
 				select {
 				case events <- ev:
 				case <-ctx.Done():
@@ -74,10 +93,21 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 			return err
 		case a := <-actions:
 			if strings.EqualFold(a.Command, "PRIVMSG") {
-				if _, err := fmt.Fprintf(conn, "PRIVMSG %s :%s\r\n", a.Target, a.Text); err != nil {
+				if _, err := fmt.Fprint(conn, limitPrivmsg(a.Target, a.Text)); err != nil {
 					return err
 				}
 			}
 		}
 	}
+}
+
+func fallbackNick(nick string) string {
+	nick = sanitizeParam(nick)
+	if nick == "" {
+		return "Golog_"
+	}
+	if len(nick) >= 28 {
+		nick = nick[:28]
+	}
+	return nick + "_"
 }
