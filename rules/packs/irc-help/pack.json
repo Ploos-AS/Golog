@@ -1,0 +1,9 @@
+{
+  "id": "irc-help",
+  "version": "0.1.0",
+  "description": "IRC help and protocol guidance rules for Golog.",
+  "roles": ["irc-help"],
+  "commands": ["!irc-help"],
+  "capabilities": ["expert.irc", "irc.help"],
+  "depends": []
+}
