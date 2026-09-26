@@ -150,7 +150,6 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 					channel = m.Params[0]
 				}
 				ev := eventFromMessage(core.EventJoin, m, nick, channel, "")
-				// extended-join: JOIN #channel account :Real Name
 				if len(m.Params) >= 2 {
 					ev.Account = normalizeAccount(m.Params[1])
 				}
@@ -206,10 +205,12 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 		case err := <-errCh:
 			return err
 		case a := <-actions:
-			if strings.EqualFold(a.Command, "PRIVMSG") {
-				if _, err := fmt.Fprint(conn, limitPrivmsg(a.Target, a.Text)); err != nil {
-					return err
-				}
+			line, ok := formatAction(a)
+			if !ok {
+				continue
+			}
+			if _, err := fmt.Fprint(conn, line); err != nil {
+				return err
 			}
 		}
 	}
