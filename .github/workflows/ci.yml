@@ -18,17 +18,19 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
 
-      - name: Dependencies
-        run: |
-          go mod tidy
-          echo '--- GO.SUM BEGIN ---'
-          cat go.sum
-          echo '--- GO.SUM END ---'
+      - name: Verify modules
+        run: go mod tidy && git diff --exit-code -- go.mod go.sum
+
+      - name: Vet
+        run: go vet ./...
 
       - name: Test
         run: go test ./...
+
+      - name: Race
+        run: go test -race ./...
 
       - name: Build
         run: go build ./cmd/golog
