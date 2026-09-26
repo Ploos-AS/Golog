@@ -140,15 +140,54 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 				if strings.EqualFold(target, c.Nick) || !isChannelTarget(target) {
 					target = nick
 				}
-				ev := core.Event{Type: core.EventPrivmsg, Nick: nick, Target: target, Text: m.Trail, Tags: m.Tags, Account: m.Tags["account"]}
-				if raw := m.Tags["time"]; raw != "" {
-					if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-						ev.Time = ts
-					}
+				if !sendEvent(ctx, events, eventFromMessage(core.EventPrivmsg, m, nick, target, m.Trail)) {
+					return
 				}
-				select {
-				case events <- ev:
-				case <-ctx.Done():
+			case "JOIN":
+				nick := NickFromPrefix(m.Prefix)
+				channel := m.Trail
+				if channel == "" && len(m.Params) > 0 {
+					channel = m.Params[0]
+				}
+				ev := eventFromMessage(core.EventJoin, m, nick, channel, "")
+				// extended-join: JOIN #channel account :Real Name
+				if len(m.Params) >= 2 {
+					ev.Account = normalizeAccount(m.Params[1])
+				}
+				if !sendEvent(ctx, events, ev) {
+					return
+				}
+			case "PART":
+				if len(m.Params) < 1 {
+					continue
+				}
+				if !sendEvent(ctx, events, eventFromMessage(core.EventPart, m, NickFromPrefix(m.Prefix), m.Params[0], m.Trail)) {
+					return
+				}
+			case "QUIT":
+				if !sendEvent(ctx, events, eventFromMessage(core.EventQuit, m, NickFromPrefix(m.Prefix), "", m.Trail)) {
+					return
+				}
+			case "NICK":
+				newNick := m.Trail
+				if newNick == "" && len(m.Params) > 0 {
+					newNick = m.Params[0]
+				}
+				oldNick := NickFromPrefix(m.Prefix)
+				if strings.EqualFold(oldNick, c.Nick) && newNick != "" {
+					c.Nick = newNick
+				}
+				if !sendEvent(ctx, events, eventFromMessage(core.EventNick, m, oldNick, newNick, "")) {
+					return
+				}
+			case "ACCOUNT":
+				account := m.Trail
+				if account == "" && len(m.Params) > 0 {
+					account = m.Params[0]
+				}
+				ev := eventFromMessage(core.EventAccount, m, NickFromPrefix(m.Prefix), "", "")
+				ev.Account = normalizeAccount(account)
+				if !sendEvent(ctx, events, ev) {
 					return
 				}
 			}
@@ -174,6 +213,32 @@ func (c *Client) RunRegistered(ctx context.Context, conn net.Conn, events chan<-
 			}
 		}
 	}
+}
+
+func sendEvent(ctx context.Context, events chan<- core.Event, ev core.Event) bool {
+	select {
+	case events <- ev:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func eventFromMessage(kind core.EventType, m Message, nick, target, text string) core.Event {
+	ev := core.Event{Type: kind, Nick: nick, Target: target, Text: text, Tags: m.Tags, Account: normalizeAccount(m.Tags["account"])}
+	if raw := m.Tags["time"]; raw != "" {
+		if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			ev.Time = ts
+		}
+	}
+	return ev
+}
+
+func normalizeAccount(account string) string {
+	if account == "*" {
+		return ""
+	}
+	return account
 }
 
 func desiredCapabilities(advertised map[string]bool, wantSASL bool) []string {
