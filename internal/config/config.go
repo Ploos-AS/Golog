@@ -17,7 +17,7 @@ type Config struct {
 	Channels         []string
 	ReconnectInitial time.Duration
 	ReconnectMax     time.Duration
-	RulePath         string
+	RulePaths        []string
 	StatePath        string
 	SASLUser         string
 	SASLPass         string
@@ -33,7 +33,6 @@ func FromEnv() (Config, error) {
 		Nick:             getenv("GOLOG_IRC_NICK", "Golog"),
 		User:             getenv("GOLOG_IRC_USER", "golog"),
 		Real:             getenv("GOLOG_IRC_REAL", "Golog IRC bot"),
-		RulePath:         getenv("GOLOG_RULES", "rules/hello.pl"),
 		StatePath:        getenv("GOLOG_STATE", "data/state.json"),
 		ReconnectInitial: time.Second,
 		ReconnectMax:     30 * time.Second,
@@ -52,6 +51,7 @@ func FromEnv() (Config, error) {
 
 	cfg.Channels = splitCSV(os.Getenv("GOLOG_IRC_CHANNELS"))
 	cfg.AdminAccounts = splitCSV(os.Getenv("GOLOG_ADMIN_ACCOUNTS"))
+	cfg.RulePaths = splitCSV(getenv("GOLOG_RULES", "rules/hello.pl"))
 
 	if raw := strings.TrimSpace(os.Getenv("GOLOG_TIMER_INTERVAL")); raw != "" {
 		interval, err := time.ParseDuration(raw)
@@ -66,6 +66,9 @@ func FromEnv() (Config, error) {
 
 	if cfg.Server == "" {
 		return Config{}, fmt.Errorf("GOLOG_IRC_SERVER must not be empty")
+	}
+	if len(cfg.RulePaths) == 0 {
+		return Config{}, fmt.Errorf("GOLOG_RULES must name at least one rule file or directory")
 	}
 	if cfg.StatePath == "" {
 		return Config{}, fmt.Errorf("GOLOG_STATE must not be empty")
