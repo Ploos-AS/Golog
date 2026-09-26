@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,35 +11,54 @@ import (
 	"github.com/Ploos-AS/Golog/internal/config"
 	"github.com/Ploos-AS/Golog/internal/core"
 	"github.com/Ploos-AS/Golog/internal/irc"
+	"github.com/Ploos-AS/Golog/internal/observability"
 	gprolog "github.com/Ploos-AS/Golog/internal/prolog"
 	"github.com/Ploos-AS/Golog/internal/prolog/ichiban"
 	"github.com/Ploos-AS/Golog/internal/state"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	if err := run(); err != nil {
+		slog.Error("Golog stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.FromEnv()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	engine, err := loadEngine(cfg.RulePath)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	store, err := state.Open(cfg.StatePath)
 	if err != nil {
-		log.Fatalf("open state: %v", err)
+		return fmt.Errorf("open state: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	metrics := observability.NewMetrics()
 	worker := core.NewWorker(engine, 64)
 	worker.SetStateStore(store)
 	worker.SetAdminAccounts(cfg.AdminAccounts)
 	worker.SetEngineLoader(func() (gprolog.Engine, error) { return loadEngine(cfg.RulePath) })
+	worker.SetMetrics(metrics)
 	go worker.Run(ctx)
+
+	if cfg.HTTPAddr != "" {
+		go func() {
+			if err := observability.ServeHTTP(ctx, cfg.HTTPAddr, metrics); err != nil && err != context.Canceled {
+				slog.Error("observability HTTP stopped", "error", err)
+			}
+		}()
+	}
 
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
@@ -52,16 +71,18 @@ func main() {
 			case <-hup:
 				candidate, err := loadEngine(cfg.RulePath)
 				if err != nil {
-					log.Printf("rule reload rejected; keeping previous rules: %v", err)
+					metrics.IncReloadFailures()
+					slog.Warn("rule reload rejected; keeping previous rules", "error", err)
 					continue
 				}
 				if err := worker.Reload(ctx, candidate); err != nil {
 					if ctx.Err() == nil {
-						log.Printf("rule reload failed; keeping previous rules: %v", err)
+						metrics.IncReloadFailures()
+						slog.Warn("rule reload failed; keeping previous rules", "error", err)
 					}
 					continue
 				}
-				log.Printf("Prolog rules reloaded from %s", cfg.RulePath)
+				slog.Info("Prolog rules reloaded", "path", cfg.RulePath)
 			}
 		}
 	}()
@@ -83,12 +104,22 @@ func main() {
 		},
 		Events:  worker.Events(),
 		Actions: worker.Actions(),
+		Metrics: metrics,
 	}
 
-	fmt.Printf("Golog M0.11: connecting to %s (TLS=%t, SASL=%t, timer=%t, state=%s, admins=%d)\n", cfg.Server, cfg.TLS, cfg.SASLUser != "", cfg.TimerInterval > 0, cfg.StatePath, len(cfg.AdminAccounts))
+	slog.Info("Golog M0.12 starting",
+		"server", cfg.Server,
+		"tls", cfg.TLS,
+		"sasl", cfg.SASLUser != "",
+		"timer", cfg.TimerInterval > 0,
+		"state", cfg.StatePath,
+		"admins", len(cfg.AdminAccounts),
+		"http", cfg.HTTPAddr,
+	)
 	if err := runtime.Run(ctx); err != nil && err != context.Canceled {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 func loadEngine(rulePath string) (gprolog.Engine, error) {
