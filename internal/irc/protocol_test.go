@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Ploos-AS/Golog/internal/core"
 )
 
 func TestFallbackNick(t *testing.T) {
@@ -31,6 +33,33 @@ func TestPrivmsgIsSanitizedAndLimited(t *testing.T) {
 	wire := strings.TrimSuffix(line, "\r\n")
 	if len(wire) > maxIRCLine {
 		t.Fatalf("line too long: %d", len(wire))
+	}
+}
+
+func TestFormatActions(t *testing.T) {
+	tests := []struct {
+		a    core.Action
+		want string
+	}{
+		{core.Action{Command: "NOTICE", Target: "alice", Text: "hello"}, "NOTICE alice :hello\r\n"},
+		{core.Action{Command: "JOIN", Target: "#golog"}, "JOIN #golog\r\n"},
+		{core.Action{Command: "PART", Target: "#golog", Text: "bye"}, "PART #golog :bye\r\n"},
+		{core.Action{Command: "TOPIC", Target: "#golog", Text: "New topic"}, "TOPIC #golog :New topic\r\n"},
+		{core.Action{Command: "MODE", Target: "#golog", Arg: "+v alice"}, "MODE #golog +v alice\r\n"},
+		{core.Action{Command: "KICK", Target: "#golog", Arg: "alice", Text: "reason"}, "KICK #golog alice :reason\r\n"},
+	}
+	for _, tt := range tests {
+		got, ok := formatAction(tt.a)
+		if !ok {
+			t.Fatalf("action unexpectedly rejected: %#v", tt.a)
+		}
+		if got != tt.want {
+			t.Fatalf("for %#v got %q want %q", tt.a, got, tt.want)
+		}
+	}
+
+	if _, ok := formatAction(core.Action{Command: "OPER", Target: "root", Text: "secret"}); ok {
+		t.Fatal("unsupported raw command must be rejected")
 	}
 }
 
