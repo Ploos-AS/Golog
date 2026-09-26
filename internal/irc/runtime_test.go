@@ -24,7 +24,7 @@ func TestRegistrationAndJoin(t *testing.T) {
 
 	r := bufio.NewReader(server)
 	var got []string
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		line, err := r.ReadString('\n')
 		if err != nil {
 			t.Fatal(err)
@@ -33,6 +33,7 @@ func TestRegistrationAndJoin(t *testing.T) {
 	}
 
 	want := []string{
+		"CAP LS 302",
 		"NICK Golog",
 		"USER golog 0 * :Golog IRC bot",
 		"JOIN #golog",
