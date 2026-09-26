@@ -34,9 +34,8 @@ func (e *Engine) Ask(query string, args ...any) (bool, error) {
 	return false, nil
 }
 
-// QueryString evaluates a goal and returns one named string variable from
-// the first solution.
-func (e *Engine) QueryString(query, variable string, args ...any) (string, bool, error) {
+// QueryReply evaluates a goal whose result variable is named Reply.
+func (e *Engine) QueryReply(query string, args ...any) (string, bool, error) {
 	solutions, err := e.p.Query(query, args...)
 	if err != nil {
 		return "", false, err
@@ -50,17 +49,11 @@ func (e *Engine) QueryString(query, variable string, args ...any) (string, bool,
 		return "", false, nil
 	}
 
-	values := map[string]any{}
-	if err := solutions.Scan(&values); err != nil {
+	var result struct {
+		Reply string
+	}
+	if err := solutions.Scan(&result); err != nil {
 		return "", false, err
 	}
-	v, ok := values[variable]
-	if !ok {
-		return "", false, nil
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", false, nil
-	}
-	return s, true, nil
+	return result.Reply, true, nil
 }
