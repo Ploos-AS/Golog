@@ -64,6 +64,26 @@ M0 establishes the standalone Go runtime, embedded Prolog engine, event model an
 - SASL success/failure participates in CAP state and reconnect handling
 - capability and tag parsing tests
 
+### M0.6 Prolog IRC event API
+
+- rich IRCv3-aware `on_privmsg/7` hook:
+  `on_privmsg(Nick, Account, Target, Text, ServerTime, Tags, Reply)`
+- backward-compatible fallback to the original `on_privmsg/4`
+- deterministic tag representation as semicolon-separated `key=value` pairs
+- lifecycle hooks for JOIN, PART, QUIT, NICK and account changes
+- extended-join account data and account-notify are normalized into the event model
+- lifecycle events and message events share the same serialized Prolog worker
+
+Available lifecycle hooks:
+
+```prolog
+on_join(Nick, Account, Channel, ServerTime).
+on_part(Nick, Channel, Reason, ServerTime).
+on_quit(Nick, Reason, ServerTime).
+on_nick(OldNick, NewNick, ServerTime).
+on_account(Nick, Account, ServerTime).
+```
+
 Run against an IRC network:
 
 ```sh
@@ -82,10 +102,13 @@ GOLOG_IRC_SASL_PASS='secret' \
 go run ./cmd/golog
 ```
 
-Current demo rule:
+Current demo rules include both the legacy hook and the rich M0.6 hook:
 
 ```prolog
 on_privmsg(_Nick, _Target, "!hello", "Hello from Golog Prolog!").
+
+on_privmsg(Nick, Account, _Target, "!context", ServerTime, Tags, Reply) :-
+    format(atom(Reply), "nick=~w account=~w time=~w tags=~w", [Nick, Account, ServerTime, Tags]).
 ```
 
 BotAI, BotWeb and PBMP are not required anywhere in this path.
