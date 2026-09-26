@@ -76,35 +76,41 @@ on_account(Nick, Account, ServerTime).
 
 ### M0.7 Prolog action API
 
-A PRIVMSG can now produce zero, one or many IRC actions using:
+A PRIVMSG can produce zero, one or many IRC actions using:
 
 ```prolog
 on_privmsg_action(Nick, Account, Target, Text, ServerTime, Tags,
                   Command, ActionTarget, Arg, ActionText).
 ```
 
-Each matching Prolog solution becomes one action. Supported commands are deliberately allowlisted:
+Supported commands are deliberately allowlisted: `PRIVMSG`, `NOTICE`, `JOIN`, `PART`, `TOPIC`, `MODE`, and `KICK`. Unsupported commands are ignored; Prolog cannot emit arbitrary raw IRC lines.
 
-- `PRIVMSG`
-- `NOTICE`
-- `JOIN`
-- `PART`
-- `TOPIC`
-- `MODE`
-- `KICK`
+### M0.8 scheduler and timer rules
 
-`Arg` is used for structured command data such as MODE arguments or the nick for KICK. Unsupported commands are ignored; Prolog cannot emit arbitrary raw IRC lines.
+The internal scheduler emits timer events onto the same serialized event queue used by IRC, so timer rules never bypass the Prolog worker.
 
-Example producing two actions from one event:
+Periodic timer rule:
 
 ```prolog
-on_privmsg_action(Nick, _Account, Target, "!multi", _Time, _Tags,
-                  "NOTICE", Nick, "", "private notice from Prolog").
-on_privmsg_action(_Nick, _Account, Target, "!multi", _Time, _Tags,
-                  "PRIVMSG", Target, "", "channel reply from Prolog").
+on_timer(Name, FiredAt, Command, Target, Arg, Text).
 ```
 
-The older reply hooks remain valid and are used when no action rule matches.
+Example:
+
+```prolog
+on_timer("heartbeat", FiredAt, "NOTICE", "#golog", "", Text) :-
+    format(atom(Text), "Golog timer fired at ~w", [FiredAt]).
+```
+
+Enable a periodic timer at runtime:
+
+```sh
+GOLOG_TIMER_NAME=heartbeat \
+GOLOG_TIMER_INTERVAL=60s \
+go run ./cmd/golog
+```
+
+The scheduler also supports one-shot delayed timers through its internal `After` API, alongside recurring `Every` timers and cancellation/replacement by timer name.
 
 ## Running
 
