@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ploos-AS/Golog/internal/observability"
 	gprolog "github.com/Ploos-AS/Golog/internal/prolog"
 	gstate "github.com/Ploos-AS/Golog/internal/state"
 )
@@ -28,6 +29,7 @@ type Worker struct {
 	reload        chan reloadRequest
 	adminAccounts map[string]struct{}
 	engineLoader  EngineLoader
+	metrics       *observability.Metrics
 }
 
 func NewWorker(engine gprolog.Engine, queueSize int) *Worker {
@@ -44,11 +46,14 @@ func NewWorker(engine gprolog.Engine, queueSize int) *Worker {
 	}
 }
 
-// SetStateStore enables persistent state for state-aware Prolog hooks.
 func (w *Worker) SetStateStore(store gstate.Store) { w.state = store }
+func (w *Worker) SetMetrics(metrics *observability.Metrics) {
+	w.metrics = metrics
+	if metrics != nil {
+		metrics.SetQueue(len(w.in), cap(w.in))
+	}
+}
 
-// SetAdminAccounts enables account-authenticated operator commands. IRC account
-// names are matched case-insensitively; nicknames alone never grant access.
 func (w *Worker) SetAdminAccounts(accounts []string) {
 	w.adminAccounts = make(map[string]struct{}, len(accounts))
 	for _, account := range accounts {
@@ -59,15 +64,12 @@ func (w *Worker) SetAdminAccounts(accounts []string) {
 	}
 }
 
-// SetEngineLoader supplies the validated engine factory used by !admin reload.
 func (w *Worker) SetEngineLoader(loader EngineLoader) { w.engineLoader = loader }
 
-func (w *Worker) Events() chan<- Event { return w.in }
-func (w *Worker) Actions() <-chan Action { return w.out }
-func (w *Worker) Errors() <-chan error { return w.err }
+func (w *Worker) Events() chan<- Event      { return w.in }
+func (w *Worker) Actions() <-chan Action    { return w.out }
+func (w *Worker) Errors() <-chan error      { return w.err }
 
-// Reload swaps in an already validated Prolog engine. The swap is serialized
-// with normal event processing so no query can observe a half-reloaded engine.
 func (w *Worker) Reload(ctx context.Context, engine gprolog.Engine) error {
 	if engine == nil {
 		return fmt.Errorf("reload engine must not be nil")
@@ -86,15 +88,29 @@ func (w *Worker) Reload(ctx context.Context, engine gprolog.Engine) error {
 	}
 }
 
+func (w *Worker) updateQueueMetric() {
+	if w.metrics != nil {
+		w.metrics.SetQueue(len(w.in), cap(w.in))
+	}
+}
+
 func (w *Worker) Run(ctx context.Context) {
 	for {
+		w.updateQueueMetric()
 		select {
 		case <-ctx.Done():
 			return
 		case req := <-w.reload:
 			w.engine = req.engine
+			if w.metrics != nil {
+				w.metrics.IncReloads()
+			}
 			req.done <- nil
 		case ev := <-w.in:
+			if w.metrics != nil {
+				w.metrics.IncEvents()
+			}
+			w.updateQueueMetric()
 			if err := w.handle(ctx, ev); err != nil {
 				select {
 				case w.err <- err:
@@ -203,9 +219,15 @@ func (w *Worker) handleAdmin(ctx context.Context, ev Event) (bool, error) {
 		}
 		candidate, err := w.engineLoader()
 		if err != nil {
+			if w.metrics != nil {
+				w.metrics.IncReloadFailures()
+			}
 			return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "reload rejected: " + err.Error()})
 		}
 		w.engine = candidate
+		if w.metrics != nil {
+			w.metrics.IncReloads()
+		}
 		return true, w.emit(ctx, Action{Command: "NOTICE", Target: ev.Nick, Text: "Prolog rules reloaded"})
 	case "join":
 		if len(fields) != 3 {
@@ -272,6 +294,9 @@ func (w *Worker) applyRuleActions(ctx context.Context, actions []gprolog.RuleAct
 				continue
 			}
 			if err := w.state.Set(a.Target, a.Text); err != nil {
+				if w.metrics != nil {
+					w.metrics.IncStateErrors()
+				}
 				return fmt.Errorf("state set %q: %w", a.Target, err)
 			}
 		case "STATE_DELETE":
@@ -279,6 +304,9 @@ func (w *Worker) applyRuleActions(ctx context.Context, actions []gprolog.RuleAct
 				continue
 			}
 			if err := w.state.Delete(a.Target); err != nil {
+				if w.metrics != nil {
+					w.metrics.IncStateErrors()
+				}
 				return fmt.Errorf("state delete %q: %w", a.Target, err)
 			}
 		default:
@@ -293,6 +321,9 @@ func (w *Worker) applyRuleActions(ctx context.Context, actions []gprolog.RuleAct
 func (w *Worker) emit(ctx context.Context, action Action) error {
 	select {
 	case w.out <- action:
+		if w.metrics != nil {
+			w.metrics.IncActions()
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
