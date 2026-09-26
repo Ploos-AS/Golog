@@ -24,7 +24,10 @@ type Runtime struct {
 
 func (r *Runtime) Run(ctx context.Context) error {
 	if r.Client == nil {
-		r.Client = &Client{Nick: r.Config.Nick, User: r.Config.User, Real: r.Config.Real, Channels: r.Config.Channels}
+		r.Client = &Client{
+			Nick: r.Config.Nick, User: r.Config.User, Real: r.Config.Real,
+			Channels: r.Config.Channels, SASLUser: r.Config.SASLUser, SASLPass: r.Config.SASLPass,
+		}
 	}
 	if r.Dial == nil {
 		r.Dial = dial
