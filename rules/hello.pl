@@ -22,6 +22,13 @@ on_privmsg_action(Nick, _Account, Target, "!multi", _ServerTime, _Tags,
 on_privmsg_action(_Nick, _Account, Target, "!multi", _ServerTime, _Tags,
                   "PRIVMSG", Target, "", "channel reply from Prolog").
 
+% M0.8 scheduled action contract:
+% on_timer(Name, FiredAt, Command, Target, Arg, Text).
+% Enable a periodic timer with GOLOG_TIMER_INTERVAL and GOLOG_TIMER_NAME.
+% Example deployment rule:
+% on_timer("heartbeat", FiredAt, "NOTICE", "#golog", "", Text) :-
+%     format(atom(Text), "Golog timer fired at ~w", [FiredAt]).
+
 % Optional lifecycle hooks (examples can be added by deployments):
 % on_join(Nick, Account, Channel, ServerTime).
 % on_part(Nick, Channel, Reason, ServerTime).
