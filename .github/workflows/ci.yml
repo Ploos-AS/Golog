@@ -37,3 +37,42 @@ jobs:
 
       - name: Alpine OCI build
         run: docker build --pull -t golog:ci .
+
+  pbmp-conformance:
+    runs-on: ubuntu-latest
+    env:
+      GOLOG_PBMP_SOCKET: /tmp/golog.pbmp.sock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start Golog PBMP qualification endpoint
+        run: |
+          go run ./cmd/golog-pbmp-qualification &
+          for i in {1..50}; do
+            test -S "$GOLOG_PBMP_SOCKET" && exit 0
+            sleep 0.1
+          done
+          exit 1
+      - name: Check out PBMP qualification suite
+        uses: actions/checkout@v4
+        with:
+          repository: Ploos-AS/PBMP
+          ref: v1.0.0
+          path: .pbmp-suite
+      - name: Qualify Golog against PBMP/1
+        run: |
+          python3 .pbmp-suite/tools/qualify_endpoint.py \
+            --socket "$GOLOG_PBMP_SOCKET" \
+            --implementation-name golog \
+            --implementation-version "$GITHUB_SHA" \
+            --output golog-pbmp-conformance.json
+          python3 -c 'import json; r=json.load(open("golog-pbmp-conformance.json")); assert r["result"] == "pass"'
+      - name: Upload PBMP conformance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: golog-pbmp-v1.0.0-conformance
+          path: golog-pbmp-conformance.json
+          if-no-files-found: error
