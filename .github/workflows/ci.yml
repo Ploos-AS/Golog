@@ -48,9 +48,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Build Golog PBMP qualification endpoint
+        run: go build -o /tmp/golog-pbmp-qualification ./cmd/golog-pbmp-qualification
       - name: Start Golog PBMP qualification endpoint
         run: |
-          go run ./cmd/golog-pbmp-qualification &
+          /tmp/golog-pbmp-qualification &
           for i in {1..100}; do
             test -e "$GOLOG_PBMP_SOCKET" && exit 0
             sleep 0.1
