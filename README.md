@@ -8,7 +8,8 @@ Golog is a full-featured IRC bot written in Go with an embedded Prolog rule and 
 - Prolog is a first-class rule/scripting layer, not an external service.
 - `github.com/ichiban/prolog` is the default embedded Prolog backend.
 - Prolog execution is serialized through a worker/event queue initially.
-- BotAI, BotWeb and PBMP are optional integrations; Golog must not depend on them.
+- PBMP, BotWeb, BotAI and BotLogic are optional integrations; Golog must not depend on them.
+- Standalone operation is a qualification requirement: disabling all four integrations must leave normal IRC, local Prolog rules, configuration and state functional.
 
 ## M0
 
