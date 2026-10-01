@@ -197,6 +197,17 @@ Available commands:
 
 `!help` merges the built-in discovery commands with commands declared by active packs. `!packs <pack-id>` shows the pack version, description, roles, commands and capabilities. Plain legacy `.pl` files without `pack.json` remain supported.
 
+### M1.4 PBMP runtime endpoint
+
+The qualified PBMP/1 adapter can optionally run inside the normal Golog process over a local Unix socket. PBMP remains disabled by default and Golog IRC operation never depends on a management client.
+
+```sh
+GOLOG_PBMP_SOCKET=/run/user/$UID/golog.pbmp.sock \\
+go run ./cmd/golog
+```
+
+The endpoint currently advertises the PBMP/1 M0 methods `pbmp.info`, `capabilities.list`, `bot.info` and `networks.list`. The socket is created with mode `0600`.
+
 ## Running
 
 ```sh
