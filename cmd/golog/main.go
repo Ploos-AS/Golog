@@ -12,6 +12,7 @@ import (
 	"github.com/Ploos-AS/Golog/internal/core"
 	"github.com/Ploos-AS/Golog/internal/irc"
 	"github.com/Ploos-AS/Golog/internal/observability"
+	"github.com/Ploos-AS/Golog/internal/pbmp"
 	gprolog "github.com/Ploos-AS/Golog/internal/prolog"
 	"github.com/Ploos-AS/Golog/internal/prolog/ichiban"
 	"github.com/Ploos-AS/Golog/internal/rules"
@@ -55,6 +56,15 @@ func run() error {
 	})
 	worker.SetMetrics(metrics)
 	go worker.Run(ctx)
+
+	if cfg.PBMPSocket != "" {
+		go func() {
+			slog.Info("PBMP/1 local endpoint enabled", "socket", cfg.PBMPSocket)
+			if err := pbmp.Serve(cfg.PBMPSocket, pbmp.State{Nick: cfg.Nick, Network: cfg.Server, Connected: true}); err != nil && ctx.Err() == nil {
+				slog.Error("PBMP endpoint stopped", "error", err)
+			}
+		}()
+	}
 
 	if cfg.HTTPAddr != "" {
 		go func() {
@@ -125,6 +135,7 @@ func run() error {
 		"state", cfg.StatePath,
 		"admins", len(cfg.AdminAccounts),
 		"http", cfg.HTTPAddr,
+		"pbmp_socket", cfg.PBMPSocket,
 		"rule_files", loadedRules,
 		"rule_file_count", len(loadedRules),
 		"packs", registry.IDs(),
