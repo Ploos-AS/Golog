@@ -38,6 +38,31 @@ jobs:
       - name: Alpine OCI build
         run: docker build --pull -t golog:ci .
 
+  standalone-contract:
+    runs-on: ubuntu-latest
+    env:
+      GOLOG_PBMP_SOCKET: ""
+      GOLOG_BOTWEB_URL: ""
+      GOLOG_BOTAI_URL: ""
+      GOLOG_BOTLOGIC_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Qualify standalone core with all integrations disabled
+        run: |
+          test -z "$GOLOG_PBMP_SOCKET"
+          test -z "$GOLOG_BOTWEB_URL"
+          test -z "$GOLOG_BOTAI_URL"
+          test -z "$GOLOG_BOTLOGIC_URL"
+          go test ./...
+          go build -o /tmp/golog-standalone ./cmd/golog
+      - name: Verify no integration is a required Go module
+        run: |
+          ! go list -m all | grep -Ei 'Ploos-AS/(PBMP|BotWeb|BotAI|BotLogic)'
+
   pbmp-conformance:
     runs-on: ubuntu-latest
     env:
